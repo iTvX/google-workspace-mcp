@@ -1,320 +1,147 @@
-# Google Workspace MCP Server
+# Google Workspace MCP — Gmail edition
 
-[![npm version](https://img.shields.io/npm/v/@aaronsb/google-workspace-mcp?logo=npm&label=npm)](https://www.npmjs.com/package/@aaronsb/google-workspace-mcp)
-[![Latest release](https://img.shields.io/github/v/release/aaronsb/google-workspace-mcp?include_prereleases&label=release)](https://github.com/aaronsb/google-workspace-mcp/releases)
-[![Node](https://img.shields.io/node/v/@aaronsb/google-workspace-mcp?logo=node.js&label=node)](https://nodejs.org)
-[![License](https://img.shields.io/github/license/aaronsb/google-workspace-mcp)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=node.js)](https://nodejs.org)
 
-**Give your AI agent real access to Google Workspace** — Gmail, Calendar, Drive, Docs, Sheets, Tasks, Meet and Contacts — from one MCP server, across as many accounts as you have.
+An MCP server that gives Claude Code full Gmail access across **several Google accounts at
+once**: the same things the claude.ai Gmail connector can do, plus one mailbox view over all
+of your accounts.
 
-Search your mail, check your calendar, write a doc, file a task — in conversation, as yourself.
-
-## Install
-
-First, you need **Google OAuth credentials** — the one prerequisite common to every path:
-
-1. Go to [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
-2. Create an **OAuth 2.0 Client ID**, application type **Desktop app**
-3. Enable the APIs you want (Gmail, Calendar, Drive, Sheets, Docs, Tasks, Meet — and **People API** for contacts, which is what Google calls it in the console)
-4. Keep the **Client ID** and **Client Secret** handy — you'll paste them in below
-
-Then pick the path that matches how you work. All three run the same server.
-
-Node 22.12 or newer. (Node 18 and 20 are both end-of-life.)
-
----
-
-### 📦 → 🤖 Claude Desktop — one-click `.mcpb` install (recommended)
-
-Download **`google-workspace-mcp.mcpb`** from the [latest release](https://github.com/aaronsb/google-workspace-mcp/releases/latest), then **drag it onto the Claude Desktop window**, or double-click it.
-
-Claude Desktop opens an install dialog with three fields:
-
-| Field | |
-|---|---|
-| **Google OAuth Client ID** | required — from the step above |
-| **Google OAuth Client Secret** | required — from the step above |
-| **Workspace Directory** | optional — where attachments, downloads and exports land. Defaults to `~/.local/share/google-workspace-mcp/workspace/`. Give it a dedicated folder — not your home, Documents, Desktop, or a Google Drive folder. |
-
-Paste, hit Save, done. No JSON to edit, no Node to install, no paths to get right — the bundle carries the server and every dependency.
-
-**One bundle covers every platform** — macOS (Intel and Apple Silicon), Linux (x64 and ARM64), and Windows. There is nothing to choose: the server is pure JavaScript, so there is no platform-specific payload to pick between.
-
-> *Cross-platform note:* `.mcpb` files install via Claude Desktop's bundled handler. If double-clicking doesn't trigger Claude on your system, drag the file onto the Claude Desktop window instead, or right-click → "Open with…" and pick Claude Desktop (then "always open with" if your OS offers). Behavior varies: macOS usually auto-associates, Windows may need a one-time association, Linux varies by desktop environment.
-
----
-
-### Claude Code — one command
-
-```bash
-claude mcp add google-workspace \
-  -e GOOGLE_CLIENT_ID=your-client-id \
-  -e GOOGLE_CLIENT_SECRET=your-client-secret \
-  -- npx -y @aaronsb/google-workspace-mcp
-```
-
-That's it — no file to edit. Verify with `/mcp`.
-
----
-
-### Other MCP clients
-
-Add an entry to the client's MCP config file (for Claude Desktop by hand, that's `claude_desktop_config.json`; for Claude Code, `.mcp.json`):
-
-```json
-{
-  "mcpServers": {
-    "google-workspace": {
-      "command": "npx",
-      "args": ["-y", "@aaronsb/google-workspace-mcp"],
-      "env": {
-        "GOOGLE_CLIENT_ID": "your-client-id",
-        "GOOGLE_CLIENT_SECRET": "your-client-secret"
-      }
-    }
-  }
-}
-```
-
-Or install it globally and point at the binary directly:
-
-```bash
-npm install -g @aaronsb/google-workspace-mcp
-```
-
-## How it fits together
-
-```mermaid
-flowchart LR
-    human["🧑 You<br>ask in plain language"]
-    agent["🤖 Your AI agent<br>Claude Desktop, Claude Code…"]
-    server["⚙️ This MCP server<br>picks the right account,<br>builds the real request"]
-    keys[("🔑 Your accounts<br>OAuth tokens, kept<br>on your own machine")]
-    google["☁️ Google<br>Gmail · Calendar · Drive · Docs<br>Sheets · Tasks · Meet · Contacts"]
-
-    human -->|"“what's on my calendar?”"| agent
-    agent -->|"tool call"| server
-    server <-->|"which account?"| keys
-    server -->|"real API call, as you"| google
-    google -->|"your data"| server
-    server -->|"shaped for an agent<br>+ what to do next"| agent
-    agent -->|"an answer"| human
-
-    classDef person   fill:#475569,color:#ffffff,stroke:#94a3b8
-    classDef robot    fill:#2d7d9a,color:#ffffff,stroke:#4a5568
-    classDef ours     fill:#7c3aed,color:#ffffff,stroke:#8b5cf6
-    classDef secrets  fill:#2d8e5e,color:#ffffff,stroke:#4a5568
-    classDef external fill:#f6821f,color:#1a1a1a,stroke:#d97706
-
-    class human person
-    class agent robot
-    class server ours
-    class keys secrets
-    class google external
-```
-
-**Your credentials never leave your machine.** The server holds an OAuth token per account, on your own disk, and calls Google *as you* — there is no middleman service, no account of ours, nothing to sign up for. Add as many accounts as you like (personal and work, side by side); the server routes each request to the right one.
+It runs locally on macOS, as a deployed copy that Claude Code starts for every session. It
+is a personal project and is not published to npm or the MCP registry.
 
 ## What it can do
 
-**12 tools across 8 Google services**, plus multi-account handling, per-account read-only access, bulk execution, content authoring, and a file sandbox.
+Five tools, when started with `GWS_SERVICES=gmail`:
 
-| Tool | What It Does |
-|------|--------------|
-| `manage_email` | Gmail — search, read (plain or sanitized HTML), read whole threads, triage, archive, read/unread, spam, trash (message or thread), labels (message or thread), drafts (create / read / update / delete), filters (never forwarding), attachments |
-| `send_email` | Gmail — send, reply / reply-all, forward, and send a saved draft as-is. The only tool that sends mail. Sends without a per-message prompt, like the claude.ai Gmail connector; add `requires_user_interaction: true` to `gmail-send.yaml` to have Claude Code ask before every send |
-| `manage_calendar` | Calendar — list, agenda, get, create, quickAdd (natural language), update, delete, calendars, freebusy |
-| `manage_drive` | Drive — search, get, upload, download, copy, rename / move, delete, export, permissions, comments, view images |
-| `manage_sheets` | Sheets — read / write ranges (row-numbered output), append, clear, manage tabs, copy / duplicate / rename |
-| `manage_docs` | Docs — get, create, append, insert text, find-and-replace |
-| `manage_tasks` | Tasks — list / create / update / complete tasks and task lists |
-| `manage_meet` | Meet — create and configure meeting spaces, see who is in a call now, browse past conferences, participants, transcripts, recordings, smart notes |
-| `manage_contacts` | Contacts — look people up in your saved contacts, the addresses you have only corresponded with, and your organization's directory; create, update and delete contacts |
-| `manage_accounts` | Multi-account lifecycle — add accounts, manage credentials and scopes |
-| `manage_scratchpad` | Compose / edit multi-line content (line- or JSON-path-addressed), attach files, send to any target; JSON mode live-syncs to Docs / Sheets |
-| `manage_workspace` | File operations in the workspace sandbox (exchange point for attachments, downloads, exports) |
-| `bulk_operations` | Do many things in one call — chain different operations in sequence with `$N.field` references, or apply one operation to many resources in a single Google request (`queue_operations` still works as an alias) |
+| Tool | Operations |
+|---|---|
+| `manage_email` | **Read:** `search`, `read`, `triage` (unread inbox), `threads`, `getThread` (whole conversation, with bodies), `getAttachment`, `viewAttachment` |
+| | **Organize a message:** `archive` / `unarchive`, `markRead` / `markUnread`, `markSpam` / `unmarkSpam`, `trash` / `untrash`, `modify` (add or remove labels) |
+| | **Organize a whole thread:** `archiveThread` / `unarchiveThread`, `markThreadSpam` / `unmarkThreadSpam`, `trashThread` / `untrashThread`, `modifyThread` |
+| | **Many at once:** `previewModifyMatching` → `modifyMatching` (label everything a search matches, previewed first) |
+| | **Labels:** `labels`, `createLabel`, `updateLabel`, `deleteLabel` |
+| | **Drafts** (never sent from here): `listDrafts`, `createDraft` (new or a reply in a thread), `getDraft`, `updateDraft`, `deleteDraft` |
+| | **Filters:** `filters`, `getFilter`, `previewFilter` → `createFilter` / `updateFilter`, `deleteFilter` |
+| `send_email` | `send`, `reply`, `replyAll`, `forward`, `sendDraft` (send a reviewed draft exactly as it is). The only tool that sends mail. |
+| `manage_accounts` | Add, re-authorize, check and remove accounts |
+| `manage_workspace` | The local folder attachments are read from and saved to |
+| `bulk_operations` | Several calls in one, or one change across many messages |
 
-Every response carries **next-steps** guidance, so the agent always knows what it can do next.
+"Archive" always means Gmail's archive: out of the inbox, still in All Mail.
 
-## One ask, many steps
-
-The useful part isn't any single operation — it's that your agent can **string them together**.
-
-You ask for one thing. The agent works out that it needs four API calls, in order, each one feeding the next:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant H as 🧑 You
-    participant A as 🤖 Your agent
-    participant S as ⚙️ MCP server
-    participant G as ☁️ Google
-
-    H->>A: "file the invoice from Acme<br>and remind me to pay it Friday"
-    A->>S: find the email
-    S->>G: search Gmail
-    G-->>S: the message
-    S-->>A: found it — and here's what you can do next
-    A->>S: save the attachment
-    S->>G: download it
-    A->>S: put it in Drive
-    S->>G: upload
-    A->>S: create a task, due Friday
-    S->>G: Google Tasks
-    A-->>H: Done. Invoice filed, task set for Friday.
-```
-
-Two things make this work. Every response tells the agent **what it can do next**, so it isn't guessing at the next step. And `bulk_operations` lets it run a whole chain in **one call**, feeding each result into the next — so "find the invoice, file it, remind me" is a single round trip rather than four.
-
-When the work is *the same* operation over many things, it can go further and use one Google request for all of them:
+### Several mailboxes as one
 
 ```
-bulk_operations { mode: 'batch', tool: 'manage_email', operation: 'trash',
-                  items: ['msg1', 'msg2', 'msg3', … ] }
-```
-
-Two hundred messages trashed in one round trip instead of two hundred. This is narrow on purpose — it works only where Google publishes a method for it, which today is contacts (create, update, delete, get) and Gmail (trash, label changes). Ask for it anywhere else and the answer names the operations that can, and points you back at sequential mode, which works everywhere.
-
-## Ask for what's missing
-
-This server exposes **95 operations**, reaching 79 of the **257 methods** Google publishes across those eight APIs. It is a curated subset on purpose: an agent has to *choose* among these, and every method it must weigh is one it can pick wrongly. A tool with 257 operations isn't more capable than one with 95 — it's harder to use correctly.
-
-But that judgement was made without you.
-
-**→ [Browse every method Google publishes](docs/api-surface.md)**
-
-Every method is listed — what it does, whether we expose it, and a **Request** link that opens a pre-filled issue. The descriptions are Google's own, quoted verbatim, and the page is generated from the same specification the client is built from, so it can't drift from reality.
-
-That page also lists **three whole APIs this server doesn't touch yet** — Chat, Slides and Forms — for the same reason: *not targeted* is a decision, not a fact of nature.
-
-A good request **names the task, not the method**:
-
-> *"I want the agent to file incoming invoices into a folder automatically."*
-
-That can be evaluated. It might turn out an existing operation already does it, or that the right answer is a different method than the one you found. *"Expose `users.settings.filters.create`"* is a conclusion, not a case — lead with the problem and let the method follow.
-
-## Why Apache 2.0, and not open core
-
-**Everything is here.** There is no paid tier, no "enterprise" build, no feature held back to sell you later. What you install is what exists.
-
-Open core works by keeping the good part back. The free thing is a lead magnet, and the moment your use gets serious you discover the operation you need lives behind a licence. That model would be especially rotten *here*: this is a piece of plumbing between you and **your own data**, using **your own Google credentials**, running on **your own machine**. Nothing about that arrangement should have a paywall in the middle of it, and nothing about it needs a vendor.
-
-[Apache 2.0](LICENSE) rather than MIT for two concrete reasons:
-
-- **An explicit patent grant.** Contributors licence their patent claims along with their code, so using this can't become a patent problem later. MIT is silent on patents, which means the question is merely unanswered rather than settled.
-- **It's safe to adopt at work.** Apache 2.0 is on essentially every corporate allow-list. Fork it, vendor it, ship it inside a commercial product — you don't owe anyone anything, and you don't need to ask.
-
-The one obligation is attribution: keep the notices ([`NOTICE`](NOTICE), [`LICENSE`](LICENSE)) with the code. That's it.
-
-Through v3.0.0 this project was MIT-licensed, and that history is preserved rather than erased — MIT-era contributions keep their original notice in [`LICENSE-MIT`](LICENSE-MIT), and their authors are credited in [`NOTICE`](NOTICE). Apache 2.0 takes back nothing MIT permitted.
-
-## Usage
-
-Add an account (opens a browser for OAuth):
-
-```
-manage_accounts { "operation": "authenticate" }
-```
-
-Then use any tool with your account email:
-
-```
-manage_email    { "operation": "triage", "email": "you@gmail.com" }
-manage_calendar { "operation": "agenda", "email": "you@gmail.com" }
-manage_drive    { "operation": "search", "email": "you@gmail.com", "query": "quarterly report" }
-```
-
-### Several accounts, one mailbox view
-
-```
-manage_email { "operation": "triage", "email": "all" }                                  # every account, each under its own heading
+manage_email { "operation": "triage", "email": "all" }                         # every account, each under its own heading
 manage_email { "operation": "search", "email": "all", "query": "from:bank newer_than:7d" }
-manage_accounts { "operation": "authenticate", "email": "you@work.com" }                # re-authorize that account
+manage_email { "operation": "labels" }                                          # no email: GWS_DEFAULT_ACCOUNT
+manage_accounts { "operation": "authenticate", "email": "you@example.com" }    # re-authorize one account
 ```
 
-`"all"` works on list operations only; anything that changes mail names its account.
+`"all"` works on list operations only. Anything that changes mail names its account, and
+`send_email` always names its sender: it never falls back to the default.
+
+## Setup (macOS)
+
+1. **Google Cloud OAuth client**: create a project, enable only the Gmail API, configure the
+   consent screen (use **Internal** if all accounts are in one Google Workspace, so tokens
+   never expire for being in testing), and create an OAuth client of type **Desktop app**.
+2. **Store the client in the Keychain** (each command prompts for the value):
+
+   ```sh
+   security add-generic-password -s google-workspace-mcp-oauth -a client_id -w
+   security add-generic-password -s google-workspace-mcp-oauth -a client_secret -w
+   ```
+
+3. **Deploy and register**:
+
+   ```sh
+   scripts/local/deploy.sh
+   claude mcp add google-workspace --scope user \
+     -e GWS_SERVICES=gmail \
+     -e GWS_DEFAULT_ACCOUNT=you@example.com \
+     -e GWS_SAFETY_POLICY=no-delete,audit \
+     -- ~/.local/lib/google-workspace-mcp/current/scripts/local/start-mcp.sh
+   ```
+
+4. **Add each account** in a new Claude Code session:
+   `manage_accounts {operation: "authenticate", email: "you@example.com"}`. Only the Gmail
+   scopes are requested (`gmail.modify`, `gmail.settings.basic`).
+
+After a code change: commit, run `scripts/local/deploy.sh`, start a new session. Details in
+[scripts/local/README.md](scripts/local/README.md).
+
+## Configuration
 
 | Variable | Effect |
 |---|---|
-| `GWS_SERVICES` | Comma-separated services to load, e.g. `gmail`. Unset loads all. Also what `authenticate` asks Google for. When set, the `queue_operations` alias is dropped, and `manage_scratchpad` too unless docs, sheets, calendar, tasks or drive is loaded — `GWS_SERVICES=gmail` serves five tools. |
-| `GWS_DEFAULT_ACCOUNT` | Account a call acts as when `email` is omitted. Never applied to `send_email`, which always names its sender. |
-| `GWS_SAFETY_POLICY` | Opt-in policies: `draft-only-email`, `no-delete`, `read-only`, `audit` (content is redacted from audit lines). |
+| `GWS_SERVICES` | Services to load, e.g. `gmail`. Also what `authenticate` asks Google for. Unset loads every service the code supports. |
+| `GWS_DEFAULT_ACCOUNT` | Account a call acts as when `email` is omitted. Never used by `send_email`. |
+| `GWS_SAFETY_POLICY` | Opt-in policies, comma-separated: `no-delete`, `audit`, `draft-only-email`, `read-only`. |
 
-### Give an account read-only access
+## Safety
 
-Some accounts should never be written to. Ask for less at consent time and the **token itself** cannot send, edit or delete — this isn't a rule layered over a broad token:
-
-```
-manage_accounts { "operation": "scopes", "email": "you@gmail.com",
-                  "services": "gmail,drive,contacts", "access": "read" }
-```
-
-Google is asked for the read-only variant of each scope, so ticking every box on the consent screen still yields a read-only token. `manage_accounts status` reports what each account actually holds.
-
-A write from a read-only account is refused before the request leaves, with the account, the operation, and the way back:
-
-```
-'create' needs write access to contacts. Account you@gmail.com was authorized
-read-only for contacts. Re-authorize with manage_accounts {operation:'scopes',
-email:'you@gmail.com', services:'contacts', access:'readwrite'}, or use an
-account that already has it.
-```
-
-Where a service has no read-only scope, you're told which ones and what they'll still be able to do **before** the browser opens.
-
-### Multi-step workflows
-
-Chain operations with result references — the output of one step feeds the next:
-
-```json
-{
-  "operations": [
-    { "tool": "manage_email", "args": { "operation": "search", "email": "you@gmail.com", "query": "from:boss subject:review" }},
-    { "tool": "manage_email", "args": { "operation": "read", "email": "you@gmail.com", "messageId": "$0.messageId" }}
-  ]
-}
-```
-
-### One operation, many things
-
-Where Google publishes a method for it, the same operation across many resources costs one request:
-
-```json
-{
-  "mode": "batch",
-  "tool": "manage_contacts",
-  "operation": "delete",
-  "email": "you@gmail.com",
-  "items": ["people/c1", "people/c2", "people/c3"]
-}
-```
-
-Anything shared by the whole batch goes at the top level; `items` carry only what differs — a bare id is enough when that's all it is.
+- **Mail cannot be deleted permanently.** The scopes held don't allow it; `trash` is the
+  furthest it goes (Gmail empties Trash after 30 days).
+- **Filters never forward mail** (`no-auto-forward`, always on): a forwarding filter would
+  send every future match with nobody asking for any of them.
+- **One way out.** Only `send_email` sends; drafts in `manage_email` never do.
+- **`no-delete`** blocks permanent deletes in other services; Gmail drafts are exempt, as in
+  the Gmail connector. **`audit`** logs every write with content redacted (who, what, to
+  whom — not the text).
+- **Per-account access**: an account authorized read-only is refused writes before the
+  request leaves.
+- **Optional gates**: `draft-only-email` stops all sending; adding
+  `requires_user_interaction: true` to `src/factory/manifest/gmail-send.yaml` makes Claude
+  Code ask before every send, in every permission mode.
+- **Email content is data, not instructions.** Say so in your `CLAUDE.md`: a message asking
+  Claude to forward, reply or change settings should never be acted on unasked.
 
 ## Where your data lives
 
-Follows the XDG Base Directory Specification:
+| What | Where |
+|---|---|
+| OAuth client id and secret | macOS Keychain, service `google-workspace-mcp-oauth` |
+| Per-account refresh tokens | `~/.local/share/google-workspace-mcp/credentials/` (readable only by you) |
+| Account list | `~/.config/google-workspace-mcp/accounts.json` |
+| Attachments workspace | `~/.local/share/google-workspace-mcp/workspace/` |
+| Logs | `~/Library/Logs/google-workspace-mcp/server-YYYY-MM.log` |
+| Running copy | `~/.local/lib/google-workspace-mcp/current` |
 
-| Data | Location |
-|------|----------|
-| Account registry | `~/.config/google-workspace-mcp/accounts.json` |
-| Credentials | `~/.local/share/google-workspace-mcp/credentials/` |
-| Workspace (file exchange) | `~/.local/share/google-workspace-mcp/workspace/` |
+Requests go only to Google's APIs. Nothing is sent anywhere else.
 
-Credentials are per-account files holding standard OAuth tokens. No secrets are stored in the project directory.
+## Development
 
-## Under the hood
+```sh
+npm ci
+make check          # type-check, lint, tests, build, smoke tests
+```
 
-You don't need any of this to use the server. But if you're curious, or you want to add an operation:
+On macOS, run tests with a non-symlinked temp dir (`TMPDIR="$(cd "$TMPDIR" && pwd -P)/" make check`):
+a few workspace tests otherwise trip over `/var` → `/private/var`.
 
-The server builds its Google API client **from Google's own machine-readable API specifications**. Nothing is transcribed by hand, so the surface can't drift from reality, and adding an operation is a YAML edit rather than a code change.
+The code still contains the upstream Calendar, Drive, Docs, Sheets, Tasks, Meet and Contacts
+services. `GWS_SERVICES` leaves them out; they are not exercised in this project.
 
-- **[How it works](docs/how-it-works.md)** — the build-time / runtime split, the descriptor, the factory
-- **[API coverage](docs/coverage.md)** — what's exposed, what isn't, and how to ask for more
-- **[The full API surface](docs/api-surface.md)** — every method Google publishes, plus the three APIs we don't target yet
-- **[Architecture decisions](docs/architecture/)** — the ADRs, including why this server owns its Google client outright
+## Origin and license
 
-## License
+This project started as a fork of
+[aaronsb/google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) v4.8.0 by
+Aaron Bockelie and contributors, and is now maintained independently. It is not affiliated
+with or endorsed by the original author.
 
-[Apache License 2.0](LICENSE) — see [Why Apache 2.0](#why-apache-20-and-not-open-core) above.
+Main changes from upstream:
+
+- Sending split into its own `send_email` tool, with `sendDraft`; drafts, archive, read
+  state, spam and labels at message and thread level in `manage_email`.
+- `GWS_SERVICES`, `GWS_DEFAULT_ACCOUNT` and `email: "all"` across accounts.
+- Gmail-only consent scopes and account pre-selection on re-authorization.
+- `no-auto-forward`, audit redaction, drafts exempt from `no-delete`.
+- `archive` means Gmail's archive (the upstream "save to a local markdown file" is removed);
+  `getThread` returns bodies; attachments are sent instead of saved as a draft.
+- A macOS launcher and deploy script (`scripts/local/`).
+
+Licensed under the [Apache License 2.0](LICENSE). The upstream copyright and attribution
+notices are kept in [NOTICE](NOTICE) and [LICENSE-MIT](LICENSE-MIT). The design records in
+`docs/` and the `RELEASE-NOTES-*.md` files are upstream history, kept as written.

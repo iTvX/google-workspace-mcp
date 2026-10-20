@@ -18,7 +18,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 
-const REPO = 'aaronsb/google-workspace-mcp';
+const REPO = 'iTvX/google-workspace-mcp';
 const OUT = 'docs/api-surface.md';
 
 const descriptor = JSON.parse(readFileSync('src/google/descriptor.json', 'utf-8'));

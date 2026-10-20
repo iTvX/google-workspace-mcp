@@ -22,3 +22,13 @@ Copyright holders in the MIT-licensed history include, in addition to the author
   Lucas Canavarro
   Mike Brummett
   Robbie Mitchell
+
+---
+
+Modifications
+
+This repository (https://github.com/iTvX/google-workspace-mcp) is an independent,
+modified version of aaronsb/google-workspace-mcp v4.8.0
+(https://github.com/aaronsb/google-workspace-mcp). Modifications Copyright 2026 Max Yu,
+licensed under the Apache License, Version 2.0. Every change is recorded in this
+repository's git history; the main ones are listed in README.md under "Origin and license".

@@ -12,7 +12,7 @@
 We take the security of Google Workspace MCP seriously. If you believe you have found a security vulnerability, please follow these steps:
 
 1. **DO NOT** open a public issue on GitHub
-2. Email your findings to aaronsb@gmail.com
+2. Report it privately through this repository's **Security → Report a vulnerability** (GitHub private vulnerability reporting)
 3. Include detailed information about the vulnerability:
    - Description of the issue
    - Steps to reproduce
@@ -66,5 +66,5 @@ Google Workspace MCP includes several security features:
 ## Security Contact
 
 For security-related inquiries, contact:
-- Email: aaronsb@gmail.com
+- GitHub: private vulnerability reporting on iTvX/google-workspace-mcp
 - Subject line should start with [SECURITY]

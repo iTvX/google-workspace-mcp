@@ -5,15 +5,15 @@
   "version": "4.8.0",
   "description": "Give AI agents access to Gmail, Calendar, Drive, and more — with multi-account support and manifest-driven API coverage",
   "author": {
-    "name": "aaronsb",
-    "url": "https://github.com/aaronsb"
+    "name": "Max Yu",
+    "url": "https://github.com/iTvX"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aaronsb/google-workspace-mcp.git"
+    "url": "https://github.com/iTvX/google-workspace-mcp.git"
   },
-  "homepage": "https://github.com/aaronsb/google-workspace-mcp#readme",
-  "support": "https://github.com/aaronsb/google-workspace-mcp/issues",
+  "homepage": "https://github.com/iTvX/google-workspace-mcp#readme",
+  "support": "https://github.com/iTvX/google-workspace-mcp/issues",
   "license": "Apache-2.0",
   "keywords": [
     "google-workspace",

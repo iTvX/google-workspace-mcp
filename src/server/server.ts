@@ -78,7 +78,7 @@ export function createServer(): Server {
 
   const server = new Server(
     {
-      name: '@aaronsb/google-workspace-mcp',
+      name: '@itvx/google-workspace-mcp',
       version: VERSION,
     },
     {
@@ -240,7 +240,7 @@ export function createServer(): Server {
           contents: [{
             uri,
             mimeType: 'application/json',
-            text: JSON.stringify({ name: '@aaronsb/google-workspace-mcp', version: VERSION }, null, 2),
+            text: JSON.stringify({ name: '@itvx/google-workspace-mcp', version: VERSION }, null, 2),
           }],
         };
       }

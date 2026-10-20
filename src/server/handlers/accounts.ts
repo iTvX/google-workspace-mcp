@@ -298,7 +298,7 @@ export async function handleAccounts(params: Record<string, unknown>): Promise<H
       const parts: string[] = [];
 
       // Version
-      parts.push(`## Server Version\n\n**@aaronsb/google-workspace-mcp** v${VERSION}\n`);
+      parts.push(`## Server Version\n\n**@itvx/google-workspace-mcp** v${VERSION}\n`);
 
       // Services
       const totalOps = services.reduce((sum, s) => sum + s.operations.length, 0);

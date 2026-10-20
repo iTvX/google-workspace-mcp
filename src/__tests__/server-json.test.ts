@@ -46,7 +46,7 @@ describe('server.json', () => {
     // Without this the registry lists a server with no way to inspect what it runs. The
     // schema calls that out: repository metadata is what lets users and security
     // reviewers read the code before installing it.
-    expect(server.repository?.url).toBe('https://github.com/aaronsb/google-workspace-mcp');
+    expect(server.repository?.url).toBe('https://github.com/iTvX/google-workspace-mcp');
     expect(server.repository?.source).toBe('github');
   });
 
@@ -69,6 +69,6 @@ describe('server.json', () => {
   it('names itself under the namespace the OIDC publish can claim', () => {
     // The registry grants io.github.<repository_owner>/* from the OIDC token's owner
     // claim (ADR-105). A name outside that namespace cannot be published by CI at all.
-    expect(server.name).toMatch(/^io\.github\.aaronsb\//);
+    expect(server.name).toMatch(/^io\.github\.itvx\//);
   });
 });

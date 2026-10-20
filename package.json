@@ -1,12 +1,12 @@
 {
-  "name": "@aaronsb/google-workspace-mcp",
+  "name": "@itvx/google-workspace-mcp",
   "version": "4.8.0",
   "license": "Apache-2.0",
-  "mcpName": "io.github.aaronsb/google-workspace",
+  "mcpName": "io.github.itvx/google-workspace",
   "description": "MCP server for Google Workspace with progressive context disclosure and multi-account orchestration",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aaronsb/google-workspace-mcp"
+    "url": "https://github.com/iTvX/google-workspace-mcp"
   },
   "type": "module",
   "bin": {
