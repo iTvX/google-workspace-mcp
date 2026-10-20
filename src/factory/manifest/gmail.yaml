@@ -464,7 +464,7 @@ operations:
 
   getAttachment:
     type: detail
-    description: "download an email attachment to workspace directory (use read first to see attachment list)"
+    description: "download an email attachment to workspace directory (use read first to see attachment list); a .zip or .gz is also unpacked and the text files inside returned, e.g. the XML of a DMARC report"
     resource: users.messages.attachments.get
     params:
       messageId:

@@ -12,6 +12,7 @@ import { basename } from 'node:path';
 
 import { call, upload } from '../../google/client.js';
 import { resolveWorkspacePath, verifyPathSafety } from '../../executor/workspace.js';
+import { extractAttachments } from '../../server/formatting/markdown.js';
 import { buildMimeMessage, lookupMimeType, type MimeAttachment } from './mime.js';
 
 /**
@@ -294,27 +295,12 @@ async function attachmentsIn(
   messageId: string,
   payload: Record<string, unknown> | undefined,
 ): Promise<MimeAttachment[]> {
-  if (!payload) return [];
-  const found: Array<{ filename: string; contentType: string; attachmentId: string }> = [];
-  const walk = (part: Record<string, unknown>) => {
-    const body = part.body as { attachmentId?: string } | undefined;
-    if (part.filename && body?.attachmentId) {
-      found.push({
-        filename: String(part.filename),
-        contentType: String(part.mimeType ?? 'application/octet-stream'),
-        attachmentId: body.attachmentId,
-      });
-    }
-    for (const p of (part.parts ?? []) as Array<Record<string, unknown>>) walk(p);
-  };
-  walk(payload);
-
-  return Promise.all(found.map(async (f) => {
+  return Promise.all(extractAttachments(payload).map(async (f) => {
     const att = await call('gmail', 'users.messages.attachments.get',
       { userId: 'me', messageId, id: f.attachmentId }, { account }) as { data: string };
     return {
       filename: f.filename,
-      contentType: f.contentType,
+      contentType: f.mimeType || 'application/octet-stream',
       data: Buffer.from(att.data, 'base64url'),
     };
   }));

@@ -217,29 +217,39 @@ export function formatEmailList(data: unknown): HandlerResponse {
   };
 }
 
-/** Extract attachments from message payload parts (recursive). */
-export function extractAttachments(parts: unknown[]): Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> {
-  const attachments: Array<{ filename: string; mimeType: string; size: number; attachmentId: string }> = [];
-  for (const part of parts) {
-    const p = part as Record<string, unknown>;
-    const filename = p.filename as string | undefined;
-    const body = p.body as Record<string, unknown> | undefined;
-    const attachmentId = body?.attachmentId as string | undefined;
+export interface AttachmentRef {
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+}
 
+/**
+ * Every attachment in a message, found by walking its payload — the payload itself
+ * included. A message that is nothing but one file (Google's DMARC reports: a single
+ * application/zip with no text part) carries that file on the payload, not in a child
+ * part, so a walk that starts at `payload.parts` never sees it.
+ *
+ * The one place that answers "what is attached": read, getAttachment, forward and the
+ * scratchpad import all use it.
+ */
+export function extractAttachments(payload: unknown): AttachmentRef[] {
+  const attachments: AttachmentRef[] = [];
+  const walk = (part: Record<string, unknown>) => {
+    const filename = part.filename as string | undefined;
+    const body = part.body as Record<string, unknown> | undefined;
+    const attachmentId = body?.attachmentId as string | undefined;
     if (filename && attachmentId) {
       attachments.push({
         filename,
-        mimeType: String(p.mimeType ?? ''),
+        mimeType: String(part.mimeType ?? ''),
         size: Number(body?.size ?? 0),
         attachmentId,
       });
     }
-
-    // Recurse into nested parts
-    if (Array.isArray(p.parts)) {
-      attachments.push(...extractAttachments(p.parts as unknown[]));
-    }
-  }
+    for (const child of (part.parts ?? []) as Array<Record<string, unknown>>) walk(child);
+  };
+  if (payload && typeof payload === 'object') walk(payload as Record<string, unknown>);
   return attachments;
 }
 
@@ -277,7 +287,7 @@ export function formatEmailDetail(
   }
 
   // Extract and display attachments
-  const attachments = payload?.parts ? extractAttachments(payload.parts as unknown[]) : [];
+  const attachments = extractAttachments(payload);
   if (attachments.length > 0) {
     parts.push('', `**Attachments (${attachments.length}):**`);
     attachments.forEach((att, i) => {

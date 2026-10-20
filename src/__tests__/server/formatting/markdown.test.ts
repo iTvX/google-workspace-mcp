@@ -168,6 +168,47 @@ describe('formatEmailDetail', () => {
     expect(result.text).not.toContain('<p>');
   });
 
+  it('lists an attachment that is the whole message, as a DMARC report is', () => {
+    // Google's DMARC reports have no text part: the payload itself is the zip.
+    const result = formatEmailDetail({
+      id: 'msg-dmarc', snippet: '',
+      payload: {
+        headers: [{ name: 'From', value: 'noreply-dmarc-support@google.com' }],
+        mimeType: 'application/zip',
+        filename: 'google.com!example.com!1746057600!1746143999.zip',
+        body: { attachmentId: 'att-zip', size: 714 },
+      },
+    });
+    expect(result.text).toContain('**Attachments (1):**');
+    expect(result.text).toContain('google.com!example.com!1746057600!1746143999.zip (714 B)');
+    expect(result.refs.attachments).toEqual([{
+      filename: 'google.com!example.com!1746057600!1746143999.zip',
+      attachmentId: 'att-zip', mimeType: 'application/zip', size: 714,
+    }]);
+  });
+
+  it('lists attachments at any depth of a multipart message', () => {
+    const result = formatEmailDetail({
+      id: 'msg-mixed',
+      payload: {
+        headers: [{ name: 'From', value: 'a@b.com' }],
+        mimeType: 'multipart/mixed',
+        parts: [
+          {
+            mimeType: 'multipart/related',
+            parts: [
+              { mimeType: 'text/html', body: { data: 'PHA-aGk8L3A-', size: 9 } },
+              { mimeType: 'image/png', filename: 'logo.png', body: { attachmentId: 'att-logo', size: 2048 } },
+            ],
+          },
+          { mimeType: 'application/pdf', filename: 'invoice.pdf', body: { attachmentId: 'att-pdf', size: 4096 } },
+        ],
+      },
+    });
+    expect((result.refs.attachments as Array<{ filename: string }>).map((a) => a.filename))
+      .toEqual(['logo.png', 'invoice.pdf']);
+  });
+
   it('shows snippet with size hint for very large bodies', () => {
     // Generate a body larger than 12k tokens (~48KB+)
     const largeText = 'x'.repeat(60_000);

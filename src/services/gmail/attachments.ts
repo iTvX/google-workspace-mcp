@@ -11,46 +11,22 @@
 import { call } from '../../google/client.js';
 import { requireString } from '../../server/handlers/validate.js';
 import { saveToWorkspace, formatFileOutput, isImageFile, buildImageBlock, getImageMimeType } from '../../executor/file-output.js';
-import type { HandlerResponse } from '../../server/formatting/markdown.js';
-
-/** Walk message parts recursively to find attachments. */
-function findAttachments(parts: unknown[]): Array<{ filename: string; attachmentId: string; mimeType: string; size: number }> {
-  const attachments: Array<{ filename: string; attachmentId: string; mimeType: string; size: number }> = [];
-  for (const part of parts) {
-    const p = part as Record<string, unknown>;
-    const filename = p.filename as string | undefined;
-    const body = p.body as Record<string, unknown> | undefined;
-    const attachmentId = body?.attachmentId as string | undefined;
-
-    if (filename && attachmentId) {
-      attachments.push({
-        filename,
-        attachmentId,
-        mimeType: String(p.mimeType ?? ''),
-        size: Number(body?.size ?? 0),
-      });
-    }
-    if (Array.isArray(p.parts)) {
-      attachments.push(...findAttachments(p.parts as unknown[]));
-    }
-  }
-  return attachments;
-}
+import { archiveKind, unpack, type UnpackResult } from '../../executor/archive.js';
+import { extractAttachments, type AttachmentRef, type HandlerResponse } from '../../server/formatting/markdown.js';
 
 /** Fetch raw attachment data by messageId and filename. Returns the buffer and metadata. */
 async function fetchAttachmentData(
   messageId: string,
   filename: string,
   account: string,
-): Promise<{ buffer: Buffer; match: { filename: string; attachmentId: string; mimeType: string; size: number } }> {
+): Promise<{ buffer: Buffer; match: AttachmentRef }> {
   // Read the message to find the attachment ID for this filename
   const msg = await call('gmail', 'users.messages.get', {
     userId: 'me',
     id: messageId,
   }, { account }) as Record<string, unknown>;
 
-  const payload = msg.payload as Record<string, unknown> | undefined;
-  const allAttachments = payload?.parts ? findAttachments(payload.parts as unknown[]) : [];
+  const allAttachments = extractAttachments(msg.payload);
 
   const match = allAttachments.find(a => a.filename === filename);
   if (!match) {
@@ -93,18 +69,65 @@ export async function handleGetAttachment(
 
   const { buffer, match } = await fetchAttachmentData(messageId, filename, account);
   const output = await saveToWorkspace(filename, buffer, match.mimeType);
+  const unpacked = await unpackToWorkspace(filename, match.mimeType, buffer);
 
   return {
-    text: formatFileOutput(output),
+    text: [formatFileOutput(output), ...unpacked.text].join('\n\n'),
     refs: {
       filename: output.filename,
       path: output.path,
       size: output.size,
       messageId,
       ...(output.content ? { content: output.content } : {}),
+      ...(unpacked.files.length > 0 ? { unpacked: unpacked.files } : {}),
     },
     ...(output.imageBlock ? { content: [output.imageBlock] } : {}),
   };
+}
+
+/**
+ * A .zip or .gz attachment is also unpacked into the workspace, and the text inside it
+ * returned the way a text attachment's is — so a zipped DMARC report reads as its XML,
+ * with no shell needed. The archive itself is saved either way; when it will not unpack,
+ * the reply says why instead of failing the download.
+ */
+async function unpackToWorkspace(
+  filename: string,
+  mimeType: string,
+  buffer: Buffer,
+): Promise<{ text: string[]; files: Array<{ filename: string; path: string; size: number }> }> {
+  const kind = archiveKind(filename, mimeType);
+  if (!kind) return { text: [], files: [] };
+
+  let result: UnpackResult;
+  try {
+    result = unpack(kind, filename, buffer);
+  } catch (err) {
+    return { text: [`_Not unpacked: ${filename} — ${(err as Error).message}._`], files: [] };
+  }
+
+  const text: string[] = [];
+  const files: Array<{ filename: string; path: string; size: number }> = [];
+  const skipped = [...result.skipped];
+  const used = new Set<string>();
+  for (const [i, file] of result.files.entries()) {
+    // Flat in the workspace, by the entry's own name; folders inside the archive are dropped.
+    let name = file.name.split(/[/\\]/).pop() || `file-${i + 1}`;
+    if (used.has(name)) name = `${i + 1}-${name}`;
+    used.add(name);
+    try {
+      const out = await saveToWorkspace(name, file.data);
+      text.push(formatFileOutput(out));
+      files.push({ filename: out.filename, path: out.path, size: out.size });
+    } catch (err) {
+      skipped.push(`${file.name} (${(err as Error).message})`);
+    }
+  }
+
+  const count = `${files.length} file${files.length === 1 ? '' : 's'}`;
+  text.unshift(`### Unpacked from ${filename} (${count})`);
+  if (skipped.length > 0) text.push(`_Left packed: ${skipped.join('; ')}._`);
+  return { text, files };
 }
 
 /**

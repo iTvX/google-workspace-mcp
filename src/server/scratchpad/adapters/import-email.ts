@@ -45,8 +45,8 @@ export async function importEmail(
 
     // Register email file attachments in scratchpad side-table
     let attCount = 0;
-    if (includeAttachments && payload?.parts) {
-      const emailAttachments = extractAttachments(payload.parts as unknown[]);
+    if (includeAttachments && payload) {
+      const emailAttachments = extractAttachments(payload);
       if (emailAttachments.length > 0) {
         await ensureWorkspaceDir();
 
