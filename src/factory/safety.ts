@@ -98,7 +98,8 @@ export const draftOnlyEmail: SafetyPolicy = {
   description: 'Block outbound email — agents can read but not send',
   applies: (service) => service === 'gmail',
   evaluate: (_args, ctx) => {
-    const blocked = ['send', 'reply', 'replyAll', 'forward'];
+    // sendDraft too: sending a saved draft is a send, whoever wrote the draft.
+    const blocked = ['send', 'reply', 'replyAll', 'forward', 'sendDraft'];
     if (blocked.includes(ctx.operation)) {
       return {
         action: 'block',

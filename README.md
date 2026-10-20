@@ -121,8 +121,8 @@ flowchart LR
 
 | Tool | What It Does |
 |------|--------------|
-| `manage_email` | Gmail — search, read (plain or sanitized HTML), triage, trash, drafts (list / delete), labels, filters (never forwarding), threads, attachments |
-| `send_email` | Gmail — send, reply / reply-all, forward. The only tool that sends mail. Sends without a per-message prompt, like the claude.ai Gmail connector; add `requires_user_interaction: true` to `gmail-send.yaml` to have Claude Code ask before every send |
+| `manage_email` | Gmail — search, read (plain or sanitized HTML), read whole threads, triage, archive, read/unread, spam, trash (message or thread), labels (message or thread), drafts (create / read / update / delete), filters (never forwarding), attachments |
+| `send_email` | Gmail — send, reply / reply-all, forward, and send a saved draft as-is. The only tool that sends mail. Sends without a per-message prompt, like the claude.ai Gmail connector; add `requires_user_interaction: true` to `gmail-send.yaml` to have Claude Code ask before every send |
 | `manage_calendar` | Calendar — list, agenda, get, create, quickAdd (natural language), update, delete, calendars, freebusy |
 | `manage_drive` | Drive — search, get, upload, download, copy, rename / move, delete, export, permissions, comments, view images |
 | `manage_sheets` | Sheets — read / write ranges (row-numbered output), append, clear, manage tabs, copy / duplicate / rename |

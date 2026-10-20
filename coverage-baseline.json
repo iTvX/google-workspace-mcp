@@ -391,7 +391,7 @@
           "status": "covered"
         },
         "users.threads.modify": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.labels.create": {
           "status": "covered"
@@ -565,7 +565,7 @@
           }
         },
         "users.drafts.send": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.messages.import": {
           "status": "gap"

@@ -82,8 +82,8 @@ describe('send_email', () => {
   it('is still refused by draft-only-email', async () => {
     configurePolicies([accountAccess, noAutoForward, draftOnlyEmail]);
 
-    for (const operation of ['send', 'reply', 'replyAll', 'forward']) {
-      const result = await handleToolCall('send_email', { ...SEND, operation, messageId: 'm1' });
+    for (const operation of ['send', 'reply', 'replyAll', 'forward', 'sendDraft']) {
+      const result = await handleToolCall('send_email', { ...SEND, operation, messageId: 'm1', draftId: 'r1' });
       expect(result.text, operation).toContain('Blocked by safety policy');
     }
     expect(mockUpload).not.toHaveBeenCalled();

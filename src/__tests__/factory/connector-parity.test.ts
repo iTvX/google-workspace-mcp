@@ -189,3 +189,80 @@ describe('6. spam, whole threads, labels', () => {
     expect(lastCall()[2]).toEqual({ userId: 'me', id: 'Label_1' });
   });
 });
+
+describe('7. archive means Gmail archive, and whole-thread parity', () => {
+  const handler = generateHandler(manifest.services.gmail, patches.gmail, 'gmail');
+  const send = generateHandler(manifest.services['gmail-send'], patches.gmail, 'gmail');
+  const lastCall = () => mockCall.mock.calls.at(-1)!;
+
+  it.each([
+    ['archive', { removeLabelIds: ['INBOX'] }],
+    ['unarchive', { addLabelIds: ['INBOX'] }],
+    ['markRead', { removeLabelIds: ['UNREAD'] }],
+    ['markUnread', { addLabelIds: ['UNREAD'] }],
+  ])('%s changes the message\'s labels in Gmail', async (operation, change) => {
+    await handler({ operation, email: MAX, messageId: 'm1' });
+    expect(lastCall()[1]).toBe('users.messages.modify');
+    expect(lastCall()[2]).toEqual({ userId: 'me', id: 'm1', ...change });
+  });
+
+  it('archive writes no local file — there is no archive-to-file any more', () => {
+    expect(manifest.services.gmail.operations.archive.resource).toBe('users.messages.modify');
+    expect((patches.gmail.customHandlers ?? {}).archive).toBeUndefined();
+  });
+
+  it.each([
+    ['archiveThread', { removeLabelIds: ['INBOX'] }],
+    ['unarchiveThread', { addLabelIds: ['INBOX'] }],
+    ['markThreadSpam', { addLabelIds: ['SPAM'], removeLabelIds: ['INBOX'] }],
+    ['unmarkThreadSpam', { addLabelIds: ['INBOX'], removeLabelIds: ['SPAM'] }],
+  ])('%s acts on the whole thread', async (operation, change) => {
+    await handler({ operation, email: MAX, threadId: 't1' });
+    expect(lastCall()[1]).toBe('users.threads.modify');
+    expect(lastCall()[2]).toEqual({ userId: 'me', id: 't1', ...change });
+  });
+
+  it('modifyThread adds and removes labels on every message of a thread', async () => {
+    mockCall.mockResolvedValue({ id: 't1', messages: [{}, {}, {}] } as never);
+    const result = await handler({
+      operation: 'modifyThread', email: MAX, threadId: 't1', addLabelIds: 'Label_1, STARRED', removeLabelIds: 'UNREAD',
+    });
+    expect(lastCall()[1]).toBe('users.threads.modify');
+    expect(lastCall()[2]).toEqual({ userId: 'me', id: 't1', addLabelIds: ['Label_1', 'STARRED'], removeLabelIds: ['UNREAD'] });
+    expect(result.refs).toMatchObject({ threadId: 't1', messageCount: 3 });
+  });
+
+  it('getThread returns each message body, not just headers', async () => {
+    mockCall.mockResolvedValue({
+      id: 't1',
+      messages: [{
+        id: 'm1',
+        payload: {
+          mimeType: 'text/plain',
+          headers: [{ name: 'From', value: 'alice@example.com' }, { name: 'Subject', value: 'Lunch?' }],
+          body: { data: Buffer.from('Are you free at noon?').toString('base64url') },
+        },
+      }],
+    } as never);
+    const result = await handler({ operation: 'getThread', email: MAX, threadId: 't1' });
+    expect(lastCall()[2]).toMatchObject({ id: 't1', format: 'full' });
+    expect(result.text).toContain('Are you free at noon?');
+
+    await handler({ operation: 'getThread', email: MAX, threadId: 't1', format: 'metadata' });
+    expect(lastCall()[2]).toMatchObject({ format: 'metadata' });
+  });
+
+  it('sendDraft sends the saved draft itself, by its draft id', async () => {
+    mockCall.mockResolvedValue({ id: 'sent-9', threadId: 't9' } as never);
+    const result = await send({ operation: 'sendDraft', email: MAX, draftId: 'r-123' });
+    expect(lastCall()[1]).toBe('users.drafts.send');
+    expect(lastCall()[2]).toEqual({ userId: 'me', id: 'r-123' });
+    expect(result.text).toContain('sent');
+    expect(result.refs).toMatchObject({ draftId: 'r-123', id: 'sent-9' });
+  });
+
+  it('sendDraft will not report success without a message id', async () => {
+    mockCall.mockResolvedValue({} as never);
+    await expect(send({ operation: 'sendDraft', email: MAX, draftId: 'r-123' })).rejects.toThrow('cannot be confirmed');
+  });
+});

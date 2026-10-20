@@ -53,21 +53,84 @@ operations:
     defaults:
       userId: me
 
+  # Archive means Gmail's Archive button: out of the inbox, still in All Mail. (This fork
+  # dropped upstream's `archive`, which saved a message to a local markdown file.)
+
   archive:
     type: action
-    description: "save an email's headers and body to a markdown file in the workspace — a LOCAL archive, not Gmail's 'remove from inbox' (attachments are listed, not downloaded)"
-    resource: users.messages.get
+    description: "archive a message, as Gmail's Archive button does: it leaves the inbox but stays in All Mail with its other labels. `unarchive` puts it back."
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        removeLabelIds: ['INBOX']
     params:
       messageId:
         type: string
         description: "Email message ID"
         required: true
         maps_to: id
-      outputPath:
-        type: string
-        description: "Local path to save the markdown file (workspace-relative; defaults to a slug from the message date and subject)"
     defaults:
       userId: me
+      removeLabelIds: ['INBOX']
+
+  unarchive:
+    type: action
+    description: "move an archived message back to the inbox"
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        addLabelIds: ['INBOX']
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['INBOX']
+
+  markRead:
+    type: action
+    description: "mark a message as read"
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        removeLabelIds: ['UNREAD']
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      removeLabelIds: ['UNREAD']
+
+  markUnread:
+    type: action
+    description: "mark a message as unread"
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        addLabelIds: ['UNREAD']
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['UNREAD']
 
   # --- Inbox management ---
 
@@ -146,6 +209,83 @@ operations:
       messageId:
         type: string
         description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['INBOX']
+      removeLabelIds: ['SPAM']
+
+  modifyThread:
+    type: action
+    description: "add or remove labels on every message in a thread at once (e.g. a label on the whole conversation; removeLabelIds UNREAD marks it all read)"
+    resource: users.threads.modify
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+      addLabelIds:
+        type: string
+        description: "Comma-separated label IDs to add (e.g. STARRED, IMPORTANT, Label_123). On modify, to this message; on the filter operations, to each matching message as it arrives; on the *ModifyMatching operations, to every message the preview counted."
+      removeLabelIds:
+        type: string
+        description: "Comma-separated label IDs to remove (e.g. UNREAD to mark read, INBOX to archive). On modify, from this message; on the filter operations, from each matching message as it arrives; on the *ModifyMatching operations, from every message the preview counted."
+    defaults:
+      userId: me
+
+  archiveThread:
+    type: action
+    description: "archive a whole conversation: every message in the thread leaves the inbox"
+    resource: users.threads.modify
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      removeLabelIds: ['INBOX']
+
+  unarchiveThread:
+    type: action
+    description: "move a whole conversation back to the inbox"
+    resource: users.threads.modify
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['INBOX']
+
+  markThreadSpam:
+    type: action
+    description: "report a whole conversation as spam: every message moves out of the inbox into Spam"
+    resource: users.threads.modify
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['SPAM']
+      removeLabelIds: ['INBOX']
+
+  unmarkThreadSpam:
+    type: action
+    description: "not spam: moves a whole conversation from Spam back to the inbox"
+    resource: users.threads.modify
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
         required: true
         maps_to: id
     defaults:
@@ -692,7 +832,7 @@ operations:
 
   getThread:
     type: detail
-    description: "get all messages in a thread"
+    description: "read a whole conversation: every message in the thread with its sender, date and body. Pass format metadata for headers only, to skim a long thread."
     resource: users.threads.get
     params:
       threadId:
@@ -700,7 +840,11 @@ operations:
         description: "Thread ID to retrieve"
         required: true
         maps_to: id
+      format:
+        type: string
+        description: "For getThread: full (default) includes each message's body; metadata is From, To, Subject and Date only"
+        enum: [full, metadata]
     defaults:
       userId: me
-      format: metadata
+      format: full
       metadataHeaders: "From,Subject,Date,To"

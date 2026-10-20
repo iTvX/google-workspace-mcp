@@ -69,7 +69,6 @@ function fingerprint(message: string): string {
 const TYPE_EXCEPTIONS: Record<string, string> = {
   'calendar.freebusy': 'a read shaped as POST — freebusy.query sends its time range in a body',
   'drive.export': 'declared an action because it writes a local file, but the API call is a GET',
-  'gmail.archive': 'declared an action because it writes a local markdown file, but the API call is a GET',
 };
 
 describe('manifest type vs the HTTP verb Google uses', () => {
@@ -344,7 +343,7 @@ describe('generateSchema', () => {
     // The whole point of the split: outbound mail is one tool, so it can be gated, audited
     // or switched off in one place. Equality on send_email, so a new outbound operation
     // has to be placed deliberately rather than landing in whichever file was open.
-    const outbound = ['send', 'reply', 'replyAll', 'forward'];
+    const outbound = ['send', 'reply', 'replyAll', 'forward', 'sendDraft'];
     const email = generateSchema(manifest.services.gmail).inputSchema.properties as Record<string, any>;
     const send = generateSchema(manifest.services['gmail-send']).inputSchema.properties as Record<string, any>;
 
@@ -624,9 +623,9 @@ describe('generateHandler', () => {
     it.each([
       ['reply'],
       ['replyAll'],
-    ])('%s attaches workspace files and forces draft', async (operation) => {
+    ])('%s sends workspace files as attachments, in the thread', async (operation) => {
       mockOriginal();
-      mockUpload.mockResolvedValue({ id: 'draft-1' });
+      mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
       const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       const result = await handler({
@@ -637,17 +636,17 @@ describe('generateHandler', () => {
         attachments: 'report.pdf, data.csv',
       });
 
-      // Attachments imply a draft — a deliberate safety choice, not a technical
-      // limit (the client can send attachments outright).
+      // Attachments are sent, like the Gmail connector does. (Upstream parked them as a
+      // draft in place of a person approving the send; drafts are createDraft here.)
       expect(mockUpload).toHaveBeenCalledWith(
         'gmail',
-        'users.drafts.create',
+        'users.messages.send',
         { userId: 'me' },
         expect.objectContaining({
           account: 'u@t.com',
           contentType: 'message/rfc822',
-          // A draft reply must stay in the original thread.
-          metadata: { message: { threadId: 'thread-1' } },
+          // A reply must stay in the original thread.
+          metadata: { threadId: 'thread-1' },
         }),
       );
 
@@ -659,7 +658,9 @@ describe('generateHandler', () => {
       expect(mime).toContain(Buffer.from('pdf').toString('base64'));
       expect(mime).toContain(Buffer.from('a,b').toString('base64'));
 
-      expect(result.refs).toMatchObject({ isDraft: true, draftId: 'draft-1' });
+      expect(result.refs).not.toHaveProperty('isDraft');
+      expect(result.refs).toMatchObject({ id: 'sent-1', threadId: 'thread-1' });
+      expect(result.text).toContain('report.pdf, data.csv');
     });
 
     it.each([

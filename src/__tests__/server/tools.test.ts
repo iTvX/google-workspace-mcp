@@ -108,7 +108,7 @@ describe('send_email schema', () => {
   const props = (tool.inputSchema as any).properties;
 
   it('carries exactly the outbound operations', () => {
-    expect([...props.operation.enum].sort()).toEqual(['forward', 'reply', 'replyAll', 'send']);
+    expect([...props.operation.enum].sort()).toEqual(['forward', 'reply', 'replyAll', 'send', 'sendDraft']);
   });
 
   it('sends without an approval gate, like the claude.ai Gmail connector', () => {

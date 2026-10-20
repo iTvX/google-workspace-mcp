@@ -46,11 +46,11 @@
     },
     {
       "name": "manage_email",
-      "description": "Search, read, trash, label, and manage Gmail messages, threads, drafts and filters"
+      "description": "Search, read, archive, trash, label, and manage Gmail messages, threads, drafts and filters"
     },
     {
       "name": "send_email",
-      "description": "Send, reply, reply-all, or forward Gmail messages"
+      "description": "Send, reply, reply-all, forward, or send a saved draft"
     },
     {
       "name": "manage_calendar",

@@ -4,16 +4,13 @@
  * Key customizations:
  * - Search hydration: messages.list only returns IDs, so we fetch metadata
  * - Custom formatters: pipe-delimited list, header-extracted detail
- * - Custom handlers: send/reply use specific response formatting
+ * - Custom handlers: send/reply use specific response formatting; drafts and thread
+ *   labels; there is no local "archive to file" — archive means Gmail's archive.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
-
 import { call } from '../../google/client.js';
-import { formatEmailList, formatEmailDetail, extractBodyFromPayload, extractAttachments, decodeSnippet, truncate, formatShortDate, type EmailBodyFormat } from '../../server/formatting/markdown.js';
+import { formatEmailList, formatEmailDetail, extractBodyFromPayload, decodeSnippet, truncate, formatShortDate, type EmailBodyFormat } from '../../server/formatting/markdown.js';
 import { requireString, optionalString, clamp } from '../../server/handlers/validate.js';
-import { ensureWorkspaceDir, resolveWorkspacePath, verifyPathSafety } from '../../executor/workspace.js';
 import { handleGetAttachment, handleViewAttachment } from './attachments.js';
 import { hydrateMessages, hydrateDrafts } from './hydrate.js';
 import {
@@ -30,39 +27,6 @@ function csv(value: unknown): string[] {
   return value ? String(value).split(',').map((s) => s.trim()).filter(Boolean) : [];
 }
 
-/** "Tue, 19 Aug 2026 ..." -> "2026-08-19"; '' when the header is not parseable. */
-const MONTH_TO_MM: Record<string, string> = {
-  Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-  Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
-};
-
-function dateSlug(dateHeader: string): string {
-  const m = /(\d{1,2}) ([A-Za-z]{3}) (\d{4})/.exec(dateHeader);
-  if (!m) return '';
-  const mm = MONTH_TO_MM[m[2]];
-  if (!mm) return '';
-  return `${m[3]}-${mm}-${m[1].padStart(2, '0')}`;
-}
-
-function slugify(value: string, maxLength = 50): string {
-  const slug = value
-    .replace(/[^\w\s-]/g, '')
-    .trim()
-    .replace(/[\s_]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, maxLength)
-    .toLowerCase();
-  return slug || 'email';
-}
-
-/** A readable default filename: "<YYYY-MM-DD>_<subject-slug>.md", falling back to the id. */
-function defaultArchiveFilename(messageId: string, dateHeader: string, subject: string): string {
-  const prefix = dateSlug(dateHeader) || messageId;
-  return `${prefix}_${slugify(subject || 'message')}.md`;
-}
-
-/** Format labels list — name, type, unread count. */
 function formatLabelList(data: unknown): HandlerResponse {
   const raw = data as Record<string, unknown>;
   const labels = (raw?.labels ?? []) as Array<Record<string, unknown>>;
@@ -344,76 +308,6 @@ export const gmailPatch: ServicePatch = {
 
   customHandlers: {
     /**
-     * Archive. Save one message's headers + plain-text body to a markdown file in the
-     * workspace. A LOCAL archive — it reads the message and writes a file, and never
-     * touches Gmail's INBOX label (that is `modify` with removeLabelIds: INBOX).
-     * Attachments are listed in the file, not downloaded — use `getAttachment` for that.
-     */
-    archive: async (params, account): Promise<HandlerResponse> => {
-      const messageId = requireString(params, 'messageId');
-
-      const data = await call('gmail', 'users.messages.get', {
-        userId: 'me',
-        id: messageId,
-        format: 'full',
-      }, { account }) as Record<string, unknown>;
-
-      const payload = data.payload as Record<string, unknown> | undefined;
-      const headers = (payload?.headers ?? []) as Array<{ name: string; value: string }>;
-      const getHeader = (name: string) =>
-        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
-
-      const subject = getHeader('subject') || '(no subject)';
-      const date = getHeader('date');
-      const from = getHeader('from');
-      const to = getHeader('to');
-      const cc = getHeader('cc');
-
-      const bodyText = extractBodyFromPayload(payload);
-      const attachments = payload?.parts ? extractAttachments(payload.parts as unknown[]) : [];
-
-      const filename = params.outputPath
-        ? String(params.outputPath)
-        : defaultArchiveFilename(messageId, date, subject);
-
-      const doc = [
-        `# ${subject}`,
-        '',
-        `**Message ID:** \`${messageId}\``,
-        `**Date:** ${date}`,
-        `**From:** ${from}`,
-        `**To:** ${to}`,
-      ];
-      if (cc) doc.push(`**Cc:** ${cc}`);
-      if (attachments.length > 0) {
-        doc.push(`**Attachments:** ${attachments.map((a) => `${a.filename} (${a.size} bytes)`).join(', ')}`);
-      }
-      doc.push('', '---', '', bodyText || '(no text body found)', '');
-
-      const wsStatus = await ensureWorkspaceDir();
-      if (!wsStatus.valid) throw new Error(`Workspace invalid: ${wsStatus.warning}`);
-      const outputPath = resolveWorkspacePath(filename);
-      await verifyPathSafety(outputPath);
-      await mkdir(dirname(outputPath), { recursive: true });
-      await writeFile(outputPath, doc.join('\n'), 'utf-8');
-
-      return {
-        text: `Archived message to **${filename}**\n\n**Message ID:** ${messageId}\n**Path:** ${outputPath}`,
-        refs: {
-          messageId,
-          filename,
-          path: outputPath,
-          subject,
-          from,
-          to,
-          date,
-          attachmentCount: attachments.length,
-          attachments: attachments.map((a) => a.filename),
-        },
-      };
-    },
-
-    /**
      * Forward.
      *
      * We do NOT thread forwards: no In-Reply-To, no References, no threadId. Gmail's
@@ -511,10 +405,9 @@ export const gmailPatch: ServicePatch = {
         ? String(params.attachments).split(',').map(s => s.trim()).filter(Boolean)
         : [];
 
-      // An attachment forces a draft. That is a SAFETY choice, not a technical
-      // limit — the client can send a 35 MB attachment outright (ADR-103 item 4
-      // proved it round-trips byte-for-byte). Making it a real send is a product
-      // change, and needs to be decided as one.
+      // Attachments are sent, not parked as a draft. Upstream forced a draft here as a
+      // stand-in for a person approving the send; this fork sends like the Gmail
+      // connector does, and drafts are manage_email createDraft (decided 2026-10-20).
       const data = await sendMail(account, {
         to, subject, body,
         from: params.from ? String(params.from) : undefined,
@@ -522,14 +415,14 @@ export const gmailPatch: ServicePatch = {
         bcc: params.bcc ? String(params.bcc) : undefined,
         html: params.html === true || params.html === 'true',
         attachments: attachmentNames,
-        draft: draft || attachmentNames.length > 0,
+        draft,
       });
 
       const attachNote = attachmentNames.length > 0
         ? `\n**Attachments:** ${attachmentNames.join(', ')}`
         : '';
 
-      if (draft || attachmentNames.length > 0) {
+      if (draft) {
         return {
           text: `Draft created for ${to}.\n\n**Subject:** ${subject}${attachNote}\n**Draft ID:** ${data.id}`,
           refs: { id: data.id, draftId: data.id, to, subject, attachments: attachmentNames, isDraft: true },
@@ -537,8 +430,51 @@ export const gmailPatch: ServicePatch = {
       }
 
       return {
-        text: `Email sent to ${to}.\n\n**Subject:** ${subject}\n**Message ID:** ${data.id}`,
-        refs: { id: data.id, threadId: data.threadId, to, subject },
+        text: `Email sent to ${to}.\n\n**Subject:** ${subject}${attachNote}\n**Message ID:** ${data.id}`,
+        refs: { id: data.id, threadId: data.threadId, to, subject, attachments: attachmentNames },
+      };
+    },
+
+    /**
+     * Send a saved draft exactly as it is — the one the user reviewed, not a re-typed
+     * copy. Registered under send_email's sendDraft (gmail-send.yaml).
+     */
+    sendDraft: async (params, account): Promise<HandlerResponse> => {
+      const draftId = requireString(params, 'draftId');
+      const data = await call('gmail', 'users.drafts.send', { userId: 'me', id: draftId }, { account }) as Record<string, unknown>;
+      if (typeof data?.id !== 'string' || data.id === '') {
+        throw new Error(
+          `Gmail accepted sending draft ${draftId} but returned no message id, so whether it was sent ` +
+          'cannot be confirmed. Check Sent before retrying — retrying may deliver it twice.',
+        );
+      }
+      return {
+        text: `Draft **${draftId}** sent.\n\n**Message ID:** ${data.id}`,
+        refs: { draftId, id: data.id, threadId: data.threadId },
+      };
+    },
+
+    /** Add or remove labels on every message in a thread at once (users.threads.modify). */
+    modifyThread: async (params, account): Promise<HandlerResponse> => {
+      const threadId = requireString(params, 'threadId');
+      const addLabelIds = csv(params.addLabelIds);
+      const removeLabelIds = csv(params.removeLabelIds);
+      if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
+        throw new Error('At least one of addLabelIds or removeLabelIds is required');
+      }
+      const data = await call('gmail', 'users.threads.modify', {
+        userId: 'me',
+        id: threadId,
+        ...(addLabelIds.length ? { addLabelIds } : {}),
+        ...(removeLabelIds.length ? { removeLabelIds } : {}),
+      }, { account }) as Record<string, unknown>;
+      const changes = [
+        addLabelIds.length ? `added ${addLabelIds.join(', ')}` : '',
+        removeLabelIds.length ? `removed ${removeLabelIds.join(', ')}` : '',
+      ].filter(Boolean).join('; ');
+      return {
+        text: `Thread **${threadId}**: ${changes}.`,
+        refs: { threadId, addLabelIds, removeLabelIds, messageCount: ((data?.messages ?? []) as unknown[]).length },
       };
     },
 
@@ -619,13 +555,13 @@ export const gmailPatch: ServicePatch = {
         messageId, body,
         html: params.html === true || params.html === 'true',
         attachments: attachmentNames,
-        draft: draft || attachmentNames.length > 0,
+        draft,
       });
       const attachNote = attachmentNames.length > 0
         ? `\n**Attachments:** ${attachmentNames.join(', ')}`
         : '';
 
-      if (draft || attachmentNames.length > 0) {
+      if (draft) {
         return {
           text: `Draft reply created.\n\n**Draft ID:** ${data.id}${attachNote}`,
           refs: { id: data.id, draftId: data.id, messageId, attachments: attachmentNames, isDraft: true },
@@ -633,7 +569,7 @@ export const gmailPatch: ServicePatch = {
       }
 
       return {
-        text: `Reply sent.\n\n**Message ID:** ${data.id}`,
+        text: `Reply sent.${attachNote}\n\n**Message ID:** ${data.id}`,
         refs: { id: data.id, threadId: data.threadId, messageId },
       };
     },
@@ -652,13 +588,13 @@ export const gmailPatch: ServicePatch = {
         cc: params.cc ? String(params.cc) : undefined,
         html: params.html === true || params.html === 'true',
         attachments: attachmentNames,
-        draft: draft || attachmentNames.length > 0,
+        draft,
       });
       const attachNote = attachmentNames.length > 0
         ? `\n**Attachments:** ${attachmentNames.join(', ')}`
         : '';
 
-      if (draft || attachmentNames.length > 0) {
+      if (draft) {
         return {
           text: `Draft reply-all created.\n\n**Draft ID:** ${data.id}${attachNote}`,
           refs: { id: data.id, draftId: data.id, messageId, attachments: attachmentNames, isDraft: true },
@@ -666,7 +602,7 @@ export const gmailPatch: ServicePatch = {
       }
 
       return {
-        text: `Reply-all sent.\n\n**Message ID:** ${data.id}`,
+        text: `Reply-all sent.${attachNote}\n\n**Message ID:** ${data.id}`,
         refs: { id: data.id, threadId: data.threadId, messageId },
       };
     },
