@@ -375,7 +375,7 @@
           }
         },
         "users.threads.untrash": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.threads.list": {
           "status": "covered",
@@ -388,7 +388,7 @@
           "status": "gap"
         },
         "users.threads.trash": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.threads.modify": {
           "status": "gap"
@@ -400,7 +400,7 @@
           "status": "gap"
         },
         "users.labels.delete": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.labels.list": {
           "status": "covered"
@@ -409,7 +409,7 @@
           "status": "gap"
         },
         "users.labels.patch": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.settings.getPop": {
           "status": "gap"
@@ -547,13 +547,13 @@
           "status": "gap"
         },
         "users.drafts.update": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.drafts.create": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.drafts.get": {
-          "status": "gap"
+          "status": "covered"
         },
         "users.drafts.delete": {
           "status": "covered"

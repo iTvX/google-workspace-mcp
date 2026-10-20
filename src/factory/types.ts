@@ -97,6 +97,13 @@ export interface ServiceDef {
    * inside bulk_operations, where only the outer call would be prompted.
    */
   requires_user_interaction?: boolean;
+  /**
+   * `email` must always be named: no GWS_DEFAULT_ACCOUNT fallback and no `"all"`.
+   *
+   * For send_email, where the account is the sender. Reading the default mailbox when
+   * none was named is a convenience; sending from it is a message from the wrong person.
+   */
+  explicit_account?: boolean;
   operations: Record<string, OperationDef>;
 }
 

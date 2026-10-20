@@ -8,8 +8,12 @@
 
 import { loadManifest, generateTools } from './generator.js';
 import { patches } from './patches.js';
+import { filterManifest, parseServices } from './services.js';
 import type { GeneratedTool } from './types.js';
 import type { Manifest } from './types.js';
 
-export const manifest: Manifest = loadManifest();
-export const generatedTools: GeneratedTool[] = generateTools(manifest, patches);
+/** The manifest this server serves — narrowed by GWS_SERVICES when set (see services.ts). */
+export const manifest: Manifest = filterManifest(loadManifest(), parseServices(process.env.GWS_SERVICES));
+export const generatedTools: GeneratedTool[] = generateTools(manifest, patches, {
+  defaultAccount: process.env.GWS_DEFAULT_ACCOUNT,
+});

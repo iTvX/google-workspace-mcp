@@ -18,6 +18,7 @@ import { requireEmail, clamp } from '../server/handlers/validate.js';
 import { formatDefault } from './defaults.js';
 import { nextSteps } from '../server/formatting/next-steps.js';
 import { evaluatePolicies } from './safety.js';
+import { listAccounts } from '../accounts/registry.js';
 import type {
   Manifest,
   ServiceDef,
@@ -98,10 +99,23 @@ function resolveManifestDir(): string {
   return dir;
 }
 
+/** Server-wide choices the generated tools depend on. */
+export interface GenerateOptions {
+  /**
+   * The account a call acts as when it names none (GWS_DEFAULT_ACCOUNT). Not applied to
+   * a service marked explicit_account.
+   */
+  defaultAccount?: string;
+}
+
+/** `email: "all"` — run a list operation once per configured account. */
+export const ALL_ACCOUNTS = 'all';
+
 /** Generate all tools from the manifest with optional patches. */
 export function generateTools(
   manifest: Manifest,
   patches?: Record<string, ServicePatch>,
+  options: GenerateOptions = {},
 ): GeneratedTool[] {
   const tools: GeneratedTool[] = [];
 
@@ -110,8 +124,8 @@ export function generateTools(
     // the parent's patch handles its operations, the parent's scopes authorize them.
     const serviceName = serviceDef.parent_service ?? fileKey;
     const patch = patches?.[serviceName];
-    const schema = generateSchema(serviceDef);
-    const handler = generateHandler(serviceDef, patch, serviceName);
+    const schema = generateSchema(serviceDef, options);
+    const handler = generateHandler(serviceDef, patch, serviceName, options);
     tools.push({ schema, handler });
   }
 
@@ -122,7 +136,7 @@ export function generateTools(
 export const REQUIRES_USER_INTERACTION = 'anthropic/requiresUserInteraction';
 
 /** Generate the JSON Schema tool definition from a service declaration. */
-export function generateSchema(service: ServiceDef): GeneratedToolSchema {
+export function generateSchema(service: ServiceDef, options: GenerateOptions = {}): GeneratedToolSchema {
   const operationNames = Object.keys(service.operations);
   const operationDescriptions = operationNames
     .map(name => `${name}: ${service.operations[name].description}`)
@@ -151,15 +165,25 @@ export function generateSchema(service: ServiceDef): GeneratedToolSchema {
     },
   };
 
+  const defaultAccount = service.explicit_account ? undefined : options.defaultAccount;
   if (service.requires_email) {
-    properties.email = { type: 'string', description: 'Account email address' };
+    properties.email = {
+      type: 'string',
+      description: service.explicit_account
+        ? 'Account email address this acts as. Required: there is no default account here.'
+        : [
+          'Account email address.',
+          defaultAccount ? `Defaults to ${defaultAccount} when omitted.` : '',
+          `On list operations, "${ALL_ACCOUNTS}" runs it once for every configured account.`,
+        ].filter(Boolean).join(' '),
+    };
   }
 
   for (const [name, def] of Object.entries(allParams)) {
     properties[name] = { type: def.type, description: def.description, ...(def.enum ? { enum: def.enum } : {}) };
   }
 
-  const required = service.requires_email ? ['operation', 'email'] : ['operation'];
+  const required = service.requires_email && !defaultAccount ? ['operation', 'email'] : ['operation'];
 
   return {
     name: service.tool_name,
@@ -188,7 +212,9 @@ export function generateHandler(
    * allows, which is the same fail-open stance it takes everywhere else.
    */
   serviceName?: string,
+  options: GenerateOptions = {},
 ): GeneratedHandler {
+  const defaultAccount = service.explicit_account ? undefined : options.defaultAccount;
   // Map tool_name to the next-steps domain key
   const domainMap: Record<string, string> = {
     manage_email: 'email',
@@ -198,11 +224,21 @@ export function generateHandler(
   };
   const domain = domainMap[service.tool_name] ?? service.google_service;
 
-  return async (params: Record<string, unknown>): Promise<HandlerResponse> => {
+  const run = async (params: Record<string, unknown>, framed: boolean): Promise<HandlerResponse> => {
     const operation = params.operation as string;
     const opDef = service.operations[operation];
     if (!opDef) {
       throw new Error(`Unknown ${service.google_service} operation: ${operation}`);
+    }
+
+    if (service.requires_email) {
+      const named = typeof params.email === 'string' ? params.email.trim() : '';
+      if (named.toLowerCase() === ALL_ACCOUNTS) {
+        return runForEveryAccount(params, opDef, framed);
+      }
+      // Fill the default in on the params themselves: custom handlers and the session
+      // context read `params.email`, not just the resolved account.
+      if (!named && defaultAccount) params = { ...params, email: defaultAccount };
     }
 
     const account = service.requires_email ? requireEmail(params) : '';
@@ -231,10 +267,10 @@ export function generateHandler(
       if (typeof value === 'string') contextMap[key] = value;
     }
 
-    const framingFooter = (): string =>
+    const framingFooter = (): string => !framed ? '' : (
       patch?.nextSteps
         ? patch.nextSteps(operation, contextMap)
-        : nextSteps(domain, operation, contextMap);
+        : nextSteps(domain, operation, contextMap));
 
     // Check for a fully custom handler first. The generator still owns
     // framing (next-steps append) — handlers produce the response text;
@@ -313,6 +349,64 @@ export function generateHandler(
       text: formatted.text + framingFooter(),
     };
   };
+
+  /**
+   * `email: "all"` — the same list operation once per configured account, each result
+   * under its account's heading.
+   *
+   * List operations only. They read; anything that changes mail must name the one
+   * account it changes, and a message id from one mailbox means nothing in another. Each
+   * account runs through `run` in full, safety policies included, so a read-only or
+   * unauthorized account is refused for itself without failing the others.
+   */
+  const runForEveryAccount = async (
+    params: Record<string, unknown>,
+    opDef: OperationDef,
+    framed: boolean,
+  ): Promise<HandlerResponse> => {
+    const operation = params.operation as string;
+    if (service.explicit_account) {
+      throw new Error(`${service.tool_name} acts as one account at a time: name it in \`email\`.`);
+    }
+    if (opDef.type !== 'list') {
+      throw new Error(
+        `email "${ALL_ACCOUNTS}" works on list operations only. '${operation}' acts on a specific ` +
+        `item, so name the account it belongs to in \`email\`.`,
+      );
+    }
+
+    // listAccounts enriches each entry with hasCredential; its declared type predates that.
+    const listed = await listAccounts() as Array<{ email: string; hasCredential?: boolean }>;
+    const accounts = listed.filter((a) => a.hasCredential).map((a) => a.email);
+    if (accounts.length === 0) {
+      throw new Error('No authorized accounts. Add one with manage_accounts {operation: "authenticate"}.');
+    }
+
+    const results = await Promise.all(accounts.map(async (email) => {
+      try {
+        return { email, response: await run({ ...params, email }, false) };
+      } catch (err) {
+        return { email, error: err instanceof Error ? err.message : String(err) };
+      }
+    }));
+
+    const sections = results.map((r) => `### ${r.email}\n\n${'response' in r && r.response ? r.response.text.trim() : `**Error:** ${r.error}`}`);
+    const note = '_Message, thread and draft ids belong to the account they are listed under: ' +
+      'pass that account as `email` to act on one._';
+    const footer = framed ? nextSteps(domain, operation, { email: accounts[0] }) : '';
+
+    return {
+      text: `## ${operation} — ${accounts.length} accounts\n\n${sections.join('\n\n')}\n\n${note}${footer}`,
+      refs: {
+        accounts: Object.fromEntries(results.map((r) => [
+          r.email,
+          'response' in r && r.response ? r.response.refs : { error: r.error },
+        ])),
+      },
+    };
+  };
+
+  return (params) => run(params, true);
 }
 
 /**

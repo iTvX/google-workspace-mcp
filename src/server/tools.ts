@@ -28,7 +28,7 @@ const handCodedSchemas: ToolSchema[] = [
           enum: ['list', 'authenticate', 'remove', 'status', 'refresh', 'scopes', 'capabilities'],
           description: 'list: show all accounts | authenticate: add new account (opens browser) | remove: delete account and credentials | status: check token validity and scopes | refresh: renew credentials | scopes: re-auth with different services | capabilities: show available services, safety policies, and workspace status',
         },
-        email: { type: 'string', description: 'Required for remove, status, refresh, scopes' },
+        email: { type: 'string', description: 'Required for remove, status, refresh, scopes. For authenticate: optional — pre-selects that Google account, which is how an existing account is re-authorized.' },
         category: { type: 'string', enum: ['personal', 'work', 'other'], description: 'For authenticate (default: personal)' },
         description: { type: 'string', description: 'For authenticate — optional label' },
         services: { type: 'string', description: 'For scopes — comma-separated service names (e.g. gmail,drive,calendar,sheets)' },

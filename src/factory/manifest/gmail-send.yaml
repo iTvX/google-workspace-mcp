@@ -18,6 +18,7 @@ description: "Send mail from a Gmail account: a new message, a reply, a reply-al
 requires_email: true
 google_service: gmail
 parent_service: gmail
+explicit_account: true
 operations:
 
   send:

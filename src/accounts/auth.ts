@@ -43,9 +43,12 @@ export async function authenticateAccount(
   clientId: string,
   clientSecret: string,
   access: AccessLevel = 'readwrite',
+  /** Comma-separated services to request. Defaults to all (the upstream behaviour). */
+  services: string = ALL_SERVICES,
+  loginHint?: string,
 ): Promise<AuthResult> {
-  const { scopes, stillAllowWrites } = scopesForServices(ALL_SERVICES, access);
-  const result = await runOAuth(clientId, clientSecret, scopes, access, stillAllowWrites);
+  const { scopes, stillAllowWrites } = scopesForServices(services, access);
+  const result = await runOAuth(clientId, clientSecret, scopes, access, stillAllowWrites, loginHint);
   return { ...result, access, stillAllowWrites };
 }
 
@@ -58,9 +61,10 @@ export async function reauthWithServices(
   clientSecret: string,
   services: string,
   access: AccessLevel = 'readwrite',
+  loginHint?: string,
 ): Promise<AuthResult> {
   const { scopes, stillAllowWrites } = scopesForServices(services, access);
-  const result = await runOAuth(clientId, clientSecret, scopes, access, stillAllowWrites);
+  const result = await runOAuth(clientId, clientSecret, scopes, access, stillAllowWrites, loginHint);
   return { ...result, access, stillAllowWrites };
 }
 
@@ -115,9 +119,10 @@ async function runOAuth(
   scopes: string[],
   access: AccessLevel = 'readwrite',
   stillAllowWrites: string[] = [],
+  loginHint?: string,
 ): Promise<AuthResult> {
   try {
-    const result = await runOAuthFlow(clientId, clientSecret, scopes);
+    const result = await runOAuthFlow(clientId, clientSecret, scopes, loginHint);
 
     // `result.scopes` is what Google GRANTED, which is not always what was asked for:
     // the consent screen lets the user untick individual permissions before approving.

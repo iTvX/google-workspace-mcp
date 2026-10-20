@@ -1,5 +1,5 @@
 tool_name: manage_email
-description: "Search, read, triage, label, archive, trash, and manage drafts and filters in a Google Workspace account. Supports Gmail search syntax. This tool sends nothing: sending, replying and forwarding are send_email."
+description: "Search, read, triage, label, archive, trash, report spam, and manage drafts, labels and filters in a Google Workspace account. Supports Gmail search syntax. This tool sends nothing: sending, replying and forwarding are send_email."
 requires_email: true
 google_service: gmail
 operations:
@@ -111,6 +111,74 @@ operations:
     defaults:
       userId: me
 
+  markSpam:
+    type: action
+    description: "report a message as spam: moves it out of the inbox into Spam"
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        addLabelIds: ['SPAM']
+        removeLabelIds: ['INBOX']
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['SPAM']
+      removeLabelIds: ['INBOX']
+
+  unmarkSpam:
+    type: action
+    description: "not spam: moves a message from Spam back to the inbox"
+    resource: users.messages.modify
+    batch:
+      resource: users.messages.batchModify
+      defaults:
+        userId: me
+        addLabelIds: ['INBOX']
+        removeLabelIds: ['SPAM']
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      addLabelIds: ['INBOX']
+      removeLabelIds: ['SPAM']
+
+  trashThread:
+    type: action
+    description: "move a whole conversation (every message in the thread) to trash"
+    resource: users.threads.trash
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+
+  untrashThread:
+    type: action
+    description: "restore a whole conversation from trash"
+    resource: users.threads.untrash
+    params:
+      threadId:
+        type: string
+        description: "Thread ID to retrieve"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+
   untrash:
     type: action
     description: "restore a message from trash"
@@ -149,6 +217,95 @@ operations:
       pageToken:
         type: string
         description: "Continue a list from where the previous page stopped: pass the pageToken its response gave. Absent from a response means that response was the last page."
+    defaults:
+      userId: me
+
+  # The unsent half of mail, kept here rather than in send_email: nothing below makes mail
+  # leave the account. A draft waits in Gmail until the user (or send_email) sends it.
+
+  createDraft:
+    type: action
+    description: "save a new draft without sending it. Give to, subject and body for a new message; give replyToMessageId instead for a reply draft in that message's thread (recipients, subject and quoting are filled in, as for a reply). Returns the draft id (r…)."
+    resource: users.drafts.create
+    params:
+      to:
+        type: string
+        description: "Recipient email(s), comma-separated"
+      subject:
+        type: string
+        description: "Email subject line"
+      body:
+        type: string
+        description: "Email body text"
+      cc:
+        type: string
+        description: "CC email(s), comma-separated"
+      bcc:
+        type: string
+        description: "BCC email(s), comma-separated"
+      html:
+        type: boolean
+        description: "Treat body as HTML content (default: plain text)"
+      attachments:
+        type: string
+        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace)"
+      from:
+        type: string
+        description: "Sender email or RFC 2822 mailbox for a verified Gmail Send As alias"
+      replyToMessageId:
+        type: string
+        description: "For createDraft: make it a reply draft to this message id, in its thread"
+      replyAll:
+        type: boolean
+        description: "For a reply draft: include everyone on the thread, as reply-all does (default: reply to the sender)"
+    defaults:
+      userId: me
+
+  getDraft:
+    type: detail
+    description: "read a draft by its draft id (the r… id from listDrafts or createDraft): recipients, subject, body and attachments"
+    resource: users.drafts.get
+    params:
+      draftId:
+        type: string
+        description: "Draft id as returned by listDrafts (an r… id, not the message id)"
+        required: true
+        maps_to: id
+    defaults:
+      userId: me
+      format: full
+
+  updateDraft:
+    type: action
+    description: "change a draft without sending it. Only the fields you give change; recipients, subject, body and attachments you leave out are kept, and a reply draft stays in its thread. `body` replaces the whole text; `attachments` replaces all attachments."
+    resource: users.drafts.update
+    params:
+      draftId:
+        type: string
+        description: "Draft id as returned by listDrafts (an r… id, not the message id)"
+        required: true
+        maps_to: id
+      to:
+        type: string
+        description: "Recipient email(s), comma-separated"
+      subject:
+        type: string
+        description: "Email subject line"
+      body:
+        type: string
+        description: "Email body text"
+      cc:
+        type: string
+        description: "CC email(s), comma-separated"
+      bcc:
+        type: string
+        description: "BCC email(s), comma-separated"
+      html:
+        type: boolean
+        description: "Treat body as HTML content (default: plain text)"
+      attachments:
+        type: string
+        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace)"
     defaults:
       userId: me
 
@@ -292,6 +449,43 @@ operations:
         type: string
         description: "Whether the label appears on messages in the message list: show (default) or hide"
         enum: [show, hide]
+    defaults:
+      userId: me
+
+  updateLabel:
+    type: action
+    description: "rename a label or change where it shows. Only the fields you give change. Renaming 'REC' does not rename nested 'REC/…' labels."
+    resource: users.labels.patch
+    params:
+      labelId:
+        type: string
+        description: "Label ID (from `labels`), e.g. Label_123 — not the label name"
+        required: true
+        maps_to: id
+      name:
+        type: string
+        description: "Label name, e.g. 'REC/Receipt'. Nested labels use a slash; create the parent first if Gmail shows nesting."
+      labelListVisibility:
+        type: string
+        description: "Whether the label appears in the label list: labelShow (default), labelShowIfUnread, or labelHide"
+        enum: [labelShow, labelShowIfUnread, labelHide]
+      messageListVisibility:
+        type: string
+        description: "Whether the label appears on messages in the message list: show (default) or hide"
+        enum: [show, hide]
+    defaults:
+      userId: me
+
+  deleteLabel:
+    type: action
+    description: "delete a label. The messages themselves stay where they are; they just lose this label. Irreversible."
+    resource: users.labels.delete
+    params:
+      labelId:
+        type: string
+        description: "Label ID (from `labels`), e.g. Label_123 — not the label name"
+        required: true
+        maps_to: id
     defaults:
       userId: me
 

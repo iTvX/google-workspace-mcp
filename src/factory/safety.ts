@@ -329,18 +329,36 @@ async function requiredScopes(op: OperationInfo): Promise<string[]> {
 }
 
 /**
- * Audit policy — allows everything but logs destructive operations to stderr.
+ * Params whose values are content rather than addressing: a mail body, a document's
+ * text, a cell value. The audit line records that they were there and how long, not
+ * what they said — the log is a record of who did what to which item, and keeping every
+ * sent message's text in a plain file would make it a second, unprotected mailbox.
+ */
+const AUDIT_REDACTED = new Set(['body', 'content', 'text', 'value', 'values', 'description', 'notes']);
+
+/** `params` with content fields replaced by `[N chars]`, for the audit line. */
+export function redactForAudit(params: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => {
+    if (!AUDIT_REDACTED.has(key) || value === undefined || value === null) return [key, value];
+    const length = typeof value === 'string' ? value.length : JSON.stringify(value).length;
+    return [key, `[${length} chars]`];
+  }));
+}
+
+/**
+ * Audit policy — allows everything but logs write operations to stderr: the operation,
+ * the account, and its arguments with content redacted (see redactForAudit).
  * Useful for monitoring what an agent does without blocking it.
  */
 export const auditLog: SafetyPolicy = {
   name: 'audit-log',
-  description: 'Log all write operations to stderr — no blocking',
+  description: 'Log all write operations to stderr, content redacted — no blocking',
   applies: () => true,
   evaluate: (_args, ctx, service) => {
     if (!isReadOperation(ctx.operation)) {
       process.stderr.write(
         `[google-workspace-mcp] AUDIT: ${service}.${ctx.operation} account=${ctx.account} ` +
-        `args=${JSON.stringify(ctx.params)}\n`,
+        `args=${JSON.stringify(redactForAudit(ctx.params))}\n`,
       );
     }
     return { action: 'allow' };

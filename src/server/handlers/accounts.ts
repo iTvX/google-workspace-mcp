@@ -1,6 +1,7 @@
 import { listAccounts, removeAccount, authenticateAndAddAccount, type Account } from '../../accounts/registry.js';
 import { checkAccountStatus, reauthWithServices } from '../../accounts/auth.js';
-import { scopesForServices, ALL_SERVICES, type AccessLevel } from '../../accounts/oauth.js';
+import { scopesForServices, type AccessLevel } from '../../accounts/oauth.js';
+import { servicesToAuthorize } from '../../factory/services.js';
 import { getAccessToken, invalidateToken } from '../../accounts/token-service.js';
 import { nextSteps } from '../formatting/next-steps.js';
 import { getActivePolicies } from '../../factory/safety.js';
@@ -11,6 +12,17 @@ import type { HandlerResponse } from '../handler.js';
 
 interface EnrichedAccount extends Account {
   hasCredential: boolean;
+}
+
+/**
+ * Said when the user approved a different Google account than the one asked for. The
+ * credential is saved under the account Google returned, so the one asked for is
+ * unchanged — worth knowing before assuming it was re-authorized.
+ */
+function accountMismatch(asked: string | undefined, got: string | undefined): string {
+  if (!asked || !got || asked.toLowerCase() === got.toLowerCase()) return '';
+  return `\n\n> Google signed in as **${got}**, not ${asked}. ${asked} was not re-authorized; ` +
+    `run this again and choose ${asked} on the consent screen.`;
 }
 
 function formatAccountList(accounts: EnrichedAccount[]): { text: string; refs: Record<string, unknown> } {
@@ -167,10 +179,15 @@ export async function handleAccounts(params: Record<string, unknown>): Promise<H
       const category = (params.category as string) || 'personal';
       const description = params.description as string | undefined;
       const access = requestedAccess(params);
+      // Only the services this server serves (GWS_SERVICES): a Gmail-only server has no
+      // business asking for Drive. `email` pre-selects the account, which is how an
+      // existing one is re-authorized — its credential is replaced, its entry kept.
+      const services = servicesToAuthorize();
+      const loginHint = typeof params.email === 'string' && params.email.trim() ? params.email.trim() : undefined;
 
       // Check what this access level would actually grant BEFORE opening a browser.
       const warning = writeAccessWarning(
-        scopesForServices(ALL_SERVICES, access).stillAllowWrites,
+        scopesForServices(services, access).stillAllowWrites,
         params,
         `manage_accounts {"operation":"authenticate","access":"read","confirmWriteAccess":true}`,
         false,
@@ -182,12 +199,14 @@ export async function handleAccounts(params: Record<string, unknown>): Promise<H
         category as 'personal' | 'work' | 'other',
         description,
         access,
+        services,
+        loginHint,
       );
       const grantNote = result.stillAllowWrites?.length
         ? `\n\n> Read-only was requested. ${result.stillAllowWrites.join(', ')} had no read-only option and can still be changed by this account.`
         : '';
       const statusText = result.status === 'success'
-        ? `Account authenticated: **${result.account}** (${access === 'read' ? 'read-only' : 'full access'})${grantNote}`
+        ? `Account authenticated: **${result.account}** (${access === 'read' ? 'read-only' : 'full access'}; ${services})${grantNote}${accountMismatch(loginHint, result.account)}`
         : `Authentication failed: ${result.error}`;
       return {
         text: statusText + nextSteps('accounts', 'authenticate'),
@@ -251,12 +270,12 @@ export async function handleAccounts(params: Record<string, unknown>): Promise<H
       );
       if (warning) return warning;
 
-      const result = await reauthWithServices(clientId, clientSecret, services, access);
+      const result = await reauthWithServices(clientId, clientSecret, services, access, email);
       const grantNote = result.stillAllowWrites?.length
         ? `\n\n> Read-only was requested. ${result.stillAllowWrites.join(', ')} had no read-only option and can still be changed by this account.`
         : '';
       const statusText = result.status === 'success'
-        ? `Scopes updated for **${result.account}**: ${services} (${access === 'read' ? 'read-only' : 'full access'})${grantNote}`
+        ? `Scopes updated for **${result.account}**: ${services} (${access === 'read' ? 'read-only' : 'full access'})${grantNote}${accountMismatch(email, result.account)}`
         : `Scope update failed: ${result.error}`;
       return {
         text: statusText + nextSteps('accounts', 'scopes', { email }),

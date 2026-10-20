@@ -225,6 +225,22 @@ manage_calendar { "operation": "agenda", "email": "you@gmail.com" }
 manage_drive    { "operation": "search", "email": "you@gmail.com", "query": "quarterly report" }
 ```
 
+### Several accounts, one mailbox view
+
+```
+manage_email { "operation": "triage", "email": "all" }                                  # every account, each under its own heading
+manage_email { "operation": "search", "email": "all", "query": "from:bank newer_than:7d" }
+manage_accounts { "operation": "authenticate", "email": "you@work.com" }                # re-authorize that account
+```
+
+`"all"` works on list operations only; anything that changes mail names its account.
+
+| Variable | Effect |
+|---|---|
+| `GWS_SERVICES` | Comma-separated services to load, e.g. `gmail`. Unset loads all. Also what `authenticate` asks Google for. |
+| `GWS_DEFAULT_ACCOUNT` | Account a call acts as when `email` is omitted. Never applied to `send_email`, which always names its sender. |
+| `GWS_SAFETY_POLICY` | Opt-in policies: `draft-only-email`, `no-delete`, `read-only`, `audit` (content is redacted from audit lines). |
+
 ### Give an account read-only access
 
 Some accounts should never be written to. Ask for less at consent time and the **token itself** cannot send, edit or delete — this isn't a rule layered over a broad token:

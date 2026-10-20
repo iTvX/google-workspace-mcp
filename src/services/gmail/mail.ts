@@ -285,7 +285,16 @@ export interface ForwardOptions {
 async function originalAttachments(account: string, original: OriginalMessage): Promise<MimeAttachment[]> {
   const msg = await call('gmail', 'users.messages.get',
     { userId: 'me', id: original.id, format: 'full' }, { account }) as Record<string, unknown>;
+  return attachmentsIn(account, original.id, msg.payload as Record<string, unknown>);
+}
 
+/** Every attachment under a message payload, with its bytes fetched from Gmail. */
+async function attachmentsIn(
+  account: string,
+  messageId: string,
+  payload: Record<string, unknown> | undefined,
+): Promise<MimeAttachment[]> {
+  if (!payload) return [];
   const found: Array<{ filename: string; contentType: string; attachmentId: string }> = [];
   const walk = (part: Record<string, unknown>) => {
     const body = part.body as { attachmentId?: string } | undefined;
@@ -298,11 +307,11 @@ async function originalAttachments(account: string, original: OriginalMessage): 
     }
     for (const p of (part.parts ?? []) as Array<Record<string, unknown>>) walk(p);
   };
-  walk(msg.payload as Record<string, unknown>);
+  walk(payload);
 
   return Promise.all(found.map(async (f) => {
     const att = await call('gmail', 'users.messages.attachments.get',
-      { userId: 'me', messageId: original.id, id: f.attachmentId }, { account }) as { data: string };
+      { userId: 'me', messageId, id: f.attachmentId }, { account }) as { data: string };
     return {
       filename: f.filename,
       contentType: f.contentType,
@@ -354,4 +363,75 @@ export async function forwardMail(account: string, opts: ForwardOptions): Promis
   });
 
   return deliver(message, account, opts.draft === true, original.threadId);
+}
+
+// --- Draft update ----------------------------------------------------------
+
+export interface DraftChanges {
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  subject?: string;
+  body?: string;
+  html?: boolean;
+  /** Workspace filenames. Given, they replace the draft's attachments; omitted, those carry over. */
+  attachments?: string[];
+}
+
+/**
+ * Replace a draft's content, keeping whatever the caller did not name.
+ *
+ * Gmail has no partial draft update: drafts.update takes a whole new message. So the
+ * current draft is read back and every field not named here carries over — recipients,
+ * subject, the plain-text body, the attachments' bytes. Its threading always carries
+ * over (threadId, In-Reply-To, References), or a reply draft would quietly turn into a
+ * new conversation the moment it was edited.
+ *
+ * An HTML-only draft edited without a new `body` keeps its text but not its formatting:
+ * only the plain-text part is read back.
+ */
+export async function updateDraftMail(
+  account: string,
+  draftId: string,
+  changes: DraftChanges,
+): Promise<Record<string, unknown>> {
+  const draft = await call('gmail', 'users.drafts.get',
+    { userId: 'me', id: draftId, format: 'full' }, { account }) as { message?: Record<string, unknown> };
+  const message = draft.message ?? {};
+  const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const headers = (payload.headers ?? []) as Array<{ name: string; value: string }>;
+  const current = (name: string): string | undefined => headerOf(headers, name) || undefined;
+
+  const to = changes.to ?? current('To');
+  if (!to) throw new Error(`Draft ${draftId} has no recipient yet; give \`to\`.`);
+
+  const attachments = changes.attachments
+    ? await loadAttachments(changes.attachments)
+    : await attachmentsIn(account, String(message.id ?? ''), payload);
+
+  const mime = buildMimeMessage({
+    from: current('From'),
+    to,
+    cc: changes.cc ?? current('Cc'),
+    bcc: changes.bcc ?? current('Bcc'),
+    subject: changes.subject ?? current('Subject') ?? '',
+    body: changes.body ?? plainBody(payload),
+    html: changes.html,
+    attachments,
+    inReplyTo: current('In-Reply-To'),
+    references: current('References'),
+  });
+
+  const threadId = message.threadId ? String(message.threadId) : undefined;
+  const data = await upload('gmail', 'users.drafts.update', { userId: 'me', id: draftId }, {
+    account,
+    media: mime,
+    contentType: 'message/rfc822',
+    metadata: { id: draftId, ...(threadId ? { message: { threadId } } : {}) },
+  }) as Record<string, unknown>;
+
+  if (typeof data?.id !== 'string' || data.id === '') {
+    throw new Error(`Gmail accepted the update to draft ${draftId} but returned no draft id, so it cannot be confirmed.`);
+  }
+  return data;
 }

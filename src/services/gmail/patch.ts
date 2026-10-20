@@ -12,7 +12,7 @@ import { dirname } from 'node:path';
 
 import { call } from '../../google/client.js';
 import { formatEmailList, formatEmailDetail, extractBodyFromPayload, extractAttachments, decodeSnippet, truncate, formatShortDate, type EmailBodyFormat } from '../../server/formatting/markdown.js';
-import { requireString, clamp } from '../../server/handlers/validate.js';
+import { requireString, optionalString, clamp } from '../../server/handlers/validate.js';
 import { ensureWorkspaceDir, resolveWorkspacePath, verifyPathSafety } from '../../executor/workspace.js';
 import { handleGetAttachment, handleViewAttachment } from './attachments.js';
 import { hydrateMessages, hydrateDrafts } from './hydrate.js';
@@ -21,9 +21,14 @@ import {
   handleCreateFilter, handleUpdateFilter, handleDeleteFilter,
 } from './filters.js';
 import { handlePreviewModifyMatching, handleModifyMatching } from './modify-matching.js';
-import { sendMail, replyMail, forwardMail } from './mail.js';
+import { sendMail, replyMail, forwardMail, updateDraftMail } from './mail.js';
 import type { ServicePatch, PatchContext } from '../../factory/types.js';
 import type { HandlerResponse } from '../../server/formatting/markdown.js';
+
+/** `"a.pdf, b.csv"` -> `['a.pdf', 'b.csv']`; anything empty -> `[]`. */
+function csv(value: unknown): string[] {
+  return value ? String(value).split(',').map((s) => s.trim()).filter(Boolean) : [];
+}
 
 /** "Tue, 19 Aug 2026 ..." -> "2026-08-19"; '' when the header is not parseable. */
 const MONTH_TO_MM: Record<string, string> = {
@@ -318,6 +323,15 @@ export const gmailPatch: ServicePatch = {
     switch (ctx.operation) {
       case 'getThread':
         return formatThreadDetail(data);
+      case 'getDraft': {
+        // drafts.get wraps the message: { id: 'r…', message: { …full message… } }.
+        const draft = data as { id?: string; message?: unknown };
+        const detail = formatEmailDetail(draft.message ?? {}, { bodyFormat: 'plain' });
+        return {
+          text: `**Draft ID:** ${draft.id ?? ''}\n\n${detail.text}`,
+          refs: { ...detail.refs, draftId: draft.id },
+        };
+      }
       default: {
         // `read` accepts an optional bodyFormat — 'plain' (default, current
         // behavior) or 'html' (sanitized HTML for content the text-strip
@@ -425,6 +439,66 @@ export const gmailPatch: ServicePatch = {
       return {
         text: `Message forwarded to ${to}.\n\n**Message ID:** ${data.id}`,
         refs: { id: data.id, threadId: data.threadId, messageId, to },
+      };
+    },
+
+    /**
+     * Save a draft — a new message, or a reply in an existing thread. Nothing is sent;
+     * this lives in manage_email for exactly that reason.
+     */
+    createDraft: async (params, account): Promise<HandlerResponse> => {
+      const body = requireString(params, 'body');
+      const html = params.html === true || params.html === 'true';
+      const attachments = csv(params.attachments);
+      const replyTo = optionalString(params, 'replyToMessageId');
+
+      if (replyTo) {
+        const data = await replyMail(account, {
+          messageId: replyTo,
+          body,
+          cc: optionalString(params, 'cc'),
+          html,
+          attachments,
+          draft: true,
+          all: params.replyAll === true || params.replyAll === 'true',
+        });
+        const msg = data.message as { id?: string; threadId?: string } | undefined;
+        return {
+          text: `Reply draft saved in the thread of message ${replyTo}. Not sent.\n\n**Draft ID:** ${data.id}`,
+          refs: { draftId: data.id, messageId: msg?.id, threadId: msg?.threadId, isDraft: true },
+        };
+      }
+
+      const to = requireString(params, 'to');
+      const subject = requireString(params, 'subject');
+      const data = await sendMail(account, {
+        to, subject, body, html, attachments,
+        from: optionalString(params, 'from'),
+        cc: optionalString(params, 'cc'),
+        bcc: optionalString(params, 'bcc'),
+        draft: true,
+      });
+      return {
+        text: `Draft saved for ${to}. Not sent.\n\n**Subject:** ${subject}\n**Draft ID:** ${data.id}`,
+        refs: { draftId: data.id, to, subject, attachments, isDraft: true },
+      };
+    },
+
+    /** Change a draft in place, keeping every field not named (see updateDraftMail). */
+    updateDraft: async (params, account): Promise<HandlerResponse> => {
+      const draftId = requireString(params, 'draftId');
+      const data = await updateDraftMail(account, draftId, {
+        to: optionalString(params, 'to'),
+        cc: optionalString(params, 'cc'),
+        bcc: optionalString(params, 'bcc'),
+        subject: optionalString(params, 'subject'),
+        body: typeof params.body === 'string' ? params.body : undefined,
+        html: params.html === undefined ? undefined : params.html === true || params.html === 'true',
+        attachments: params.attachments === undefined ? undefined : csv(params.attachments),
+      });
+      return {
+        text: `Draft **${data.id}** updated. Not sent.`,
+        refs: { draftId: data.id, isDraft: true },
       };
     },
 

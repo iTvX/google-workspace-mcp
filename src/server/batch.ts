@@ -11,7 +11,7 @@
  * defect three times (the hardcoded queue tool enum, the stale coverage baseline, #161),
  * and a list of batchable operations would be the fourth.
  */
-import { loadManifest } from '../factory/generator.js';
+import { manifest } from '../factory/registry.js';
 import { evaluatePolicies } from '../factory/safety.js';
 import { call } from '../google/client.js';
 import { buildPerson } from '../services/contacts/patch.js';
@@ -32,7 +32,8 @@ export interface BatchableOp {
 /** Every operation the manifest says can batch, keyed `tool.operation`. */
 export function batchableOperations(): Map<string, BatchableOp> {
   const out = new Map<string, BatchableOp>();
-  for (const [service, def] of Object.entries(loadManifest().services)) {
+  // The served manifest, so a service left out by GWS_SERVICES cannot be batched either.
+  for (const [service, def] of Object.entries(manifest.services)) {
     for (const [operation, op] of Object.entries(def.operations)) {
       if (!op.batch) continue;
       out.set(`${def.tool_name}.${operation}`, {

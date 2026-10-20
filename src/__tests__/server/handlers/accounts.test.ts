@@ -181,12 +181,33 @@ describe('handleAccounts', () => {
 
     it('defaults to full access, so an existing caller is unaffected', async () => {
       await handleAccounts({ operation: 'authenticate' });
-      expect(mockAuthAdd).toHaveBeenCalledWith('test-id', 'test-secret', 'personal', undefined, 'readwrite');
+      // Every service, as upstream did, when GWS_SERVICES is not set; no account pre-selected.
+      expect(mockAuthAdd).toHaveBeenCalledWith('test-id', 'test-secret', 'personal', undefined, 'readwrite', 'gmail,drive,calendar,sheets,docs,tasks,slides,meet', undefined);
+    });
+
+    it('asks only for the served services, and pre-selects the account it is given', async () => {
+      process.env.GWS_SERVICES = 'gmail';
+      mockAuthAdd.mockResolvedValue({ status: 'success', account: 'max@example.com' });
+
+      const result = await handleAccounts({ operation: 'authenticate', email: 'max@example.com' });
+
+      expect(mockAuthAdd).toHaveBeenCalledWith('test-id', 'test-secret', 'personal', undefined, 'readwrite', 'gmail', 'max@example.com');
+      expect(result.text).toContain('max@example.com');
+      expect(result.text).not.toContain('not re-authorized');
+    });
+
+    it('says so when Google signed in as a different account than the one asked for', async () => {
+      mockAuthAdd.mockResolvedValue({ status: 'success', account: 'other@example.com' });
+
+      const result = await handleAccounts({ operation: 'authenticate', email: 'max@example.com' });
+
+      expect(result.text).toContain('Google signed in as **other@example.com**');
+      expect(result.text).toContain('max@example.com was not re-authorized');
     });
 
     it('passes read through when asked', async () => {
       const result = await handleAccounts({ operation: 'authenticate', access: 'read' });
-      expect(mockAuthAdd).toHaveBeenCalledWith('test-id', 'test-secret', 'personal', undefined, 'read');
+      expect(mockAuthAdd).toHaveBeenCalledWith('test-id', 'test-secret', 'personal', undefined, 'read', 'gmail,drive,calendar,sheets,docs,tasks,slides,meet', undefined);
       expect(result.text).toContain('read-only');
     });
 
@@ -241,7 +262,8 @@ describe('handleAccounts', () => {
       expect(result.text).toContain('gmail,drive');
       // Defaults to full access when `access` is not given, so an existing caller
       // authorizes exactly what it always did.
-      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,drive', 'readwrite');
+      // The account named is passed on as the login hint, so Google pre-selects it.
+      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,drive', 'readwrite', 'a@test.com');
     });
 
     it('asks for read-only scopes when access is read', async () => {
@@ -251,7 +273,7 @@ describe('handleAccounts', () => {
         operation: 'scopes', email: 'a@test.com', services: 'gmail,drive', access: 'read',
       });
 
-      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,drive', 'read');
+      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,drive', 'read', 'a@test.com');
       expect(result.text).toContain('read-only');
     });
 
@@ -285,7 +307,7 @@ describe('handleAccounts', () => {
         access: 'read', confirmWriteAccess: true,
       });
 
-      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,meet', 'read');
+      expect(mockReauth).toHaveBeenCalledWith('test-id', 'test-secret', 'gmail,meet', 'read', 'a@test.com');
       // …and the response still says what was actually granted.
       expect(result.text).toContain('meet had no read-only option');
     });

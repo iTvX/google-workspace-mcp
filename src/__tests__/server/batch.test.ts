@@ -25,8 +25,10 @@ describe('which operations batch', () => {
       'manage_contacts.delete',
       'manage_contacts.get',
       'manage_contacts.update',
+      'manage_email.markSpam',
       'manage_email.modify',
       'manage_email.trash',
+      'manage_email.unmarkSpam',
     ]);
   });
 });

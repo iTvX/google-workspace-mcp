@@ -122,7 +122,10 @@ async function dispatchToolCall(
     throw new Error(`Unknown tool: ${toolName}`);
   }
 
-  const email = typeof params.email === 'string' ? params.email : undefined;
+  // `email: "all"` is not an account; each account's run is tracked by nothing here.
+  const email = typeof params.email === 'string' && params.email.trim().toLowerCase() !== 'all'
+    ? params.email
+    : undefined;
 
   if (email) {
     await tracker.ensureBaseline(email, currentEpoch);

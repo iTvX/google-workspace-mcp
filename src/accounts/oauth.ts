@@ -189,10 +189,12 @@ export async function runOAuthFlow(
   clientId: string,
   clientSecret: string,
   scopes: string[],
+  /** Pre-select this Google account on the consent screen (re-authorizing a known one). */
+  loginHint?: string,
 ): Promise<OAuthResult> {
   const state = randomBytes(16).toString('hex');
 
-  const { code, redirectUri } = await listenForCallback(clientId, scopes, state);
+  const { code, redirectUri } = await listenForCallback(clientId, scopes, state, loginHint);
 
   // Exchange authorization code for tokens
   const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
@@ -252,6 +254,7 @@ function listenForCallback(
   clientId: string,
   scopes: string[],
   state: string,
+  loginHint?: string,
 ): Promise<{ code: string; redirectUri: string }> {
   return new Promise((resolve, reject) => {
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -310,7 +313,7 @@ function listenForCallback(
 
       redirectUri = `http://127.0.0.1:${addr.port}/callback`;
 
-      const authUrl = buildAuthUrl(clientId, redirectUri, scopes, state);
+      const authUrl = buildAuthUrl(clientId, redirectUri, scopes, state, loginHint);
       process.stderr.write(`[google-workspace-mcp] OAuth: opening browser for consent\n`);
       openBrowser(authUrl);
     });
@@ -322,11 +325,12 @@ function listenForCallback(
   });
 }
 
-function buildAuthUrl(
+export function buildAuthUrl(
   clientId: string,
   redirectUri: string,
   scopes: string[],
   state: string,
+  loginHint?: string,
 ): string {
   const params = new URLSearchParams({
     client_id: clientId,
@@ -337,6 +341,9 @@ function buildAuthUrl(
     prompt: 'consent',
     state,
   });
+  // With several Google accounts signed in to the browser, Google otherwise picks the
+  // first, and re-authorizing one account silently authorizes another.
+  if (loginHint) params.set('login_hint', loginHint);
   return `${GOOGLE_AUTH_URL}?${params.toString()}`;
 }
 

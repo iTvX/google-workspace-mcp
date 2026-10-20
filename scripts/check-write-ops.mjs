@@ -37,6 +37,8 @@ const descriptor = JSON.parse(readFileSync('src/google/descriptor.json', 'utf-8'
 const BODILESS = new Set([
   'gmail:users.messages.trash',      // the id in the path IS the request
   'gmail:users.messages.untrash',
+  'gmail:users.threads.trash',       // same, for a whole thread
+  'gmail:users.threads.untrash',
   'sheets:spreadsheets.values.clear', // clears the addressed range; body is {}
   'calendar:events.quickAdd',         // its `text` is a QUERY param, not a body field
 ]);
