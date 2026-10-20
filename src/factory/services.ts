@@ -56,3 +56,32 @@ export function filterManifest(manifest: Manifest, wanted: string[] | undefined)
 export function servicesToAuthorize(env: string | undefined = process.env.GWS_SERVICES): string {
   return parseServices(env)?.join(',') ?? ALL_SERVICES;
 }
+
+/** Services the given manifest serves; a split-off tool counts as its parent. */
+export function loadedServices(manifest: Manifest): Set<string> {
+  return new Set(Object.entries(manifest.services).map(([key, def]) => serviceOf(key, def)));
+}
+
+/**
+ * What manage_scratchpad can deliver to besides mail. Its mail target is a draft, which
+ * manage_email createDraft already makes, so it earns its place only next to one of these.
+ */
+const SCRATCHPAD_SERVICES = ['docs', 'sheets', 'calendar', 'tasks', 'drive'];
+
+/**
+ * Whether a hand-coded tool is offered, given the services this server loads.
+ *
+ * With GWS_SERVICES unset nothing changes: every tool, as upstream serves them. Once a
+ * deployment narrows itself, two tools have nothing to add:
+ *   - queue_operations, the former name of bulk_operations, kept for clients configured
+ *     before the rename — a deployment set up with GWS_SERVICES has none;
+ *   - manage_scratchpad, unless a service it delivers to (besides mail) is loaded.
+ * A hidden tool is gone from the dispatcher and from bulk_operations too, not just from
+ * the list (see handler.ts).
+ */
+export function handCodedToolServed(name: string, loaded: ReadonlySet<string>, narrowed: boolean): boolean {
+  if (!narrowed) return true;
+  if (name === 'queue_operations') return false;
+  if (name === 'manage_scratchpad') return SCRATCHPAD_SERVICES.some((service) => loaded.has(service));
+  return true;
+}

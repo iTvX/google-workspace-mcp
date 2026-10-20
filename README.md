@@ -237,7 +237,7 @@ manage_accounts { "operation": "authenticate", "email": "you@work.com" }        
 
 | Variable | Effect |
 |---|---|
-| `GWS_SERVICES` | Comma-separated services to load, e.g. `gmail`. Unset loads all. Also what `authenticate` asks Google for. |
+| `GWS_SERVICES` | Comma-separated services to load, e.g. `gmail`. Unset loads all. Also what `authenticate` asks Google for. When set, the `queue_operations` alias is dropped, and `manage_scratchpad` too unless docs, sheets, calendar, tasks or drive is loaded — `GWS_SERVICES=gmail` serves five tools. |
 | `GWS_DEFAULT_ACCOUNT` | Account a call acts as when `email` is omitted. Never applied to `send_email`, which always names its sender. |
 | `GWS_SAFETY_POLICY` | Opt-in policies: `draft-only-email`, `no-delete`, `read-only`, `audit` (content is redacted from audit lines). |
 

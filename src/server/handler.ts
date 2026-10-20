@@ -4,7 +4,7 @@ import { handleScratchpad } from './scratchpad/handler.js';
 import { handleQueue } from './queue.js';
 import { handleBatch } from './batch.js';
 import { generatedTools } from '../factory/registry.js';
-import { requiresUserInteraction } from './tools.js';
+import { requiresUserInteraction, getToolSchema } from './tools.js';
 import { getSessionTracker, sessionContext } from './session/index.js';
 import { runAsToolCall } from './call-context.js';
 
@@ -42,11 +42,17 @@ for (const tool of generatedTools) {
   domainHandlers[tool.schema.name] = tool.handler;
 }
 
+// A tool the server does not advertise (hidden by GWS_SERVICES, see tools.ts) is not
+// reachable either — not by name, and not from inside bulk_operations.
+for (const name of Object.keys(domainHandlers)) {
+  if (!getToolSchema(name)) delete domainHandlers[name];
+}
+
 /**
  * The names that reach the bulk handler. `queue_operations` is the former name, kept
  * working for one minor release — ADR-308. Both are advertised and both dispatch here.
  */
-export const BULK_TOOL_NAMES = ['bulk_operations', 'queue_operations'];
+export const BULK_TOOL_NAMES = ['bulk_operations', 'queue_operations'].filter((name) => getToolSchema(name));
 
 /**
  * What a queued operation may call: every tool, including `bulk_operations` itself.

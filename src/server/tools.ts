@@ -5,8 +5,9 @@
  * manage_accounts (account lifecycle) and queue_operations (meta-tool).
  */
 
-import { generatedTools } from '../factory/registry.js';
+import { generatedTools, manifest } from '../factory/registry.js';
 import { REQUIRES_USER_INTERACTION } from '../factory/generator.js';
+import { handCodedToolServed, loadedServices, parseServices } from '../factory/services.js';
 
 export interface ToolSchema {
   name: string;
@@ -212,8 +213,13 @@ for (const [oldName, newName] of Object.entries(DEPRECATED_ALIASES)) {
 // Factory-generated schemas from the shared registry
 const factorySchemas: ToolSchema[] = generatedTools.map(t => t.schema);
 
+// A deployment narrowed by GWS_SERVICES drops the hand-coded tools it has no use for
+// (services.ts, handCodedToolServed). Unnarrowed, this is every tool, as before.
+const narrowed = parseServices(process.env.GWS_SERVICES) !== undefined;
+const loaded = loadedServices(manifest);
+
 export const toolSchemas: ToolSchema[] = [
-  ...handCodedSchemas,
+  ...handCodedSchemas.filter((tool) => handCodedToolServed(tool.name, loaded, narrowed)),
   ...factorySchemas,
 ];
 
