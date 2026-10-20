@@ -1,5 +1,5 @@
 tool_name: manage_email
-description: "Search, read, send, forward, or manage emails in a Google Workspace account. Supports Gmail search syntax."
+description: "Search, read, triage, label, archive, trash, and manage drafts and filters in a Google Workspace account. Supports Gmail search syntax. This tool sends nothing: sending, replying and forwarding are send_email, which asks the user to approve each message."
 requires_email: true
 google_service: gmail
 operations:
@@ -68,104 +68,6 @@ operations:
         description: "Local path to save the markdown file (workspace-relative; defaults to a slug from the message date and subject)"
     defaults:
       userId: me
-
-  send:
-    type: action
-    description: "compose and send a new email (creates draft when attachments present, 35MB attachment limit via upload endpoint)"
-    params:
-      to:
-        type: string
-        description: "Recipient email(s), comma-separated"
-        required: true
-      subject:
-        type: string
-        description: "Email subject line"
-        required: true
-      body:
-        type: string
-        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
-        required: true
-      from:
-        type: string
-        description: "Sender email or RFC 2822 mailbox for a verified Gmail Send As alias"
-      cc:
-        type: string
-        description: "CC email(s), comma-separated. On `replyAll` these are ADDITIONAL — they do not replace the recipients already on the thread."
-      bcc:
-        type: string
-        description: "BCC email(s), comma-separated"
-      attachments:
-        type: string
-        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
-      html:
-        type: boolean
-        description: "Treat body as HTML content (default: plain text)"
-      draft:
-        type: boolean
-        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
-
-  reply:
-    type: action
-    description: "reply to a message (thread-aware, creates draft when attachments present)"
-    params:
-      messageId:
-        type: string
-        description: "Email message ID"
-        required: true
-      body:
-        type: string
-        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
-        required: true
-      attachments:
-        type: string
-        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
-      html:
-        type: boolean
-        description: "Treat body as HTML content (default: plain text)"
-      draft:
-        type: boolean
-        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
-
-  replyAll:
-    type: action
-    description: "reply-all to a message (thread-aware, includes all recipients, creates draft when attachments present)"
-    params:
-      messageId:
-        type: string
-        description: "Email message ID"
-        required: true
-      body:
-        type: string
-        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
-        required: true
-      cc:
-        type: string
-        description: "CC email(s), comma-separated. On `replyAll` these are ADDITIONAL — they do not replace the recipients already on the thread."
-      attachments:
-        type: string
-        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
-      html:
-        type: boolean
-        description: "Treat body as HTML content (default: plain text)"
-      draft:
-        type: boolean
-        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
-
-  forward:
-    type: action
-    description: "forward a message to new recipients (includes original attachments by default)"
-    params:
-      messageId:
-        type: string
-        description: "Email message ID"
-        required: true
-      to:
-        type: string
-        description: "Recipient email(s), comma-separated"
-        required: true
-      body:
-        type: string
-        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
 
   # --- Inbox management ---
 
@@ -422,7 +324,7 @@ operations:
 
   previewFilter:
     type: list
-    description: "evaluate a filter without creating it: how many messages it matches today and a sample, what each action does, and any duplicate or overlapping filter. Returns the previewToken createFilter needs; with filterId, previews replacing that filter and returns the token updateFilter needs. Criteria are the match* params; actions are addLabelIds, removeLabelIds and forwardTo. A good criterion is the query of a search that already found the mail."
+    description: "evaluate a filter without creating it: how many messages it matches today and a sample, what each action does, and any duplicate or overlapping filter. Returns the previewToken createFilter needs; with filterId, previews replacing that filter and returns the token updateFilter needs. Criteria are the match* params; actions are addLabelIds and removeLabelIds (filters cannot forward mail in this build). A good criterion is the query of a search that already found the mail."
     resource: users.settings.filters.list
     params:
       filterId:
@@ -463,9 +365,6 @@ operations:
       removeLabelIds:
         type: string
         description: "Comma-separated label IDs to remove (e.g. UNREAD to mark read, INBOX to archive). On modify, from this message; on the filter operations, from each matching message as it arrives; on the *ModifyMatching operations, from every message the preview counted."
-      forwardTo:
-        type: string
-        description: "Filter action: forward each match to this address. It must already be a verified forwarding address in Gmail settings."
     defaults:
       userId: me
 
@@ -508,9 +407,6 @@ operations:
       removeLabelIds:
         type: string
         description: "Comma-separated label IDs to remove (e.g. UNREAD to mark read, INBOX to archive). On modify, from this message; on the filter operations, from each matching message as it arrives; on the *ModifyMatching operations, from every message the preview counted."
-      forwardTo:
-        type: string
-        description: "Filter action: forward each match to this address. It must already be a verified forwarding address in Gmail settings."
       previewToken:
         type: string
         description: "The token the preview returned for this exact change: previewFilter for createFilter and updateFilter, previewModifyMatching for modifyMatching. Required: the write runs only after its preview has been seen."
@@ -560,9 +456,6 @@ operations:
       removeLabelIds:
         type: string
         description: "Comma-separated label IDs to remove (e.g. UNREAD to mark read, INBOX to archive). On modify, from this message; on the filter operations, from each matching message as it arrives; on the *ModifyMatching operations, from every message the preview counted."
-      forwardTo:
-        type: string
-        description: "Filter action: forward each match to this address. It must already be a verified forwarding address in Gmail settings."
       previewToken:
         type: string
         description: "The token the preview returned for this exact change: previewFilter for createFilter and updateFilter, previewModifyMatching for modifyMatching. Required: the write runs only after its preview has been seen."

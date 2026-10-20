@@ -4,6 +4,7 @@ import { handleScratchpad } from './scratchpad/handler.js';
 import { handleQueue } from './queue.js';
 import { handleBatch } from './batch.js';
 import { generatedTools } from '../factory/registry.js';
+import { requiresUserInteraction } from './tools.js';
 import { getSessionTracker, sessionContext } from './session/index.js';
 import { runAsToolCall } from './call-context.js';
 
@@ -64,6 +65,23 @@ function queueableHandlers(depth: number): Record<string, ToolHandler> {
   return {
     ...domainHandlers,
     ...Object.fromEntries(BULK_TOOL_NAMES.map((name) => [name, nested])),
+    // The one exception. The client asks a person to approve each call to these tools,
+    // and the client only sees the outer bulk call — so from inside a queue they would
+    // run approved by nobody. Refused with a sentence rather than left out, so an agent
+    // that names one learns what to do instead of meeting "Unknown tool".
+    ...Object.fromEntries(Object.keys(domainHandlers)
+      .filter(requiresUserInteraction)
+      .map((name) => [name, refuseInQueue(name)])),
+  };
+}
+
+function refuseInQueue(name: string): ToolHandler {
+  return async () => {
+    throw new Error(
+      `${name} cannot run inside bulk_operations: the user approves each ${name} call, and ` +
+      `inside a queue only the bulk call would be shown to them. Call ${name} directly, ` +
+      `once per message.`,
+    );
   };
 }
 

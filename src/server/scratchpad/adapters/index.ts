@@ -3,7 +3,6 @@
  */
 
 // Send adapters
-export { sendEmail } from './send-email.js';
 export { sendEmailDraft } from './send-email-draft.js';
 export { sendDocCreate, sendDocWrite } from './send-doc.js';
 export { sendWorkspace } from './send-workspace.js';

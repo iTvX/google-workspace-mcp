@@ -309,7 +309,10 @@ describe('every manifest service is in the scope map', () => {
   // cannot use is a scope requested for nothing.
   it('and every scope-map service is in the manifest', async () => {
     const { loadManifest } = await import('../../factory/generator.js');
-    const manifest = Object.keys(loadManifest().services).sort();
+    // By service, not file: gmail-send.yaml is gmail's outbound tool, authorized by
+    // gmail's scopes, not a service of its own.
+    const manifest = [...new Set(Object.entries(loadManifest().services)
+      .map(([key, def]) => def.parent_service ?? key))].sort();
     const mapped = Object.keys(SERVICE_SCOPE_MAP).sort();
 
     // `slides` is mapped and has no manifest yet — presentations.batchUpdate is an open

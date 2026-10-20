@@ -48,7 +48,9 @@ function probeFormatHook(
 function buildCoverageMap(): CoverageEntry[] {
   const entries: CoverageEntry[] = [];
 
-  for (const [serviceName, serviceDef] of Object.entries(manifest.services)) {
+  for (const [fileKey, serviceDef] of Object.entries(manifest.services)) {
+    // A split-off tool (gmail-send) runs through its parent service's patch.
+    const serviceName = serviceDef.parent_service ?? fileKey;
     const patch = patches[serviceName] as ServicePatch | undefined;
 
     for (const [opName, opDef] of Object.entries(serviceDef.operations)) {

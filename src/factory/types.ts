@@ -76,6 +76,27 @@ export interface ServiceDef {
   requires_email: boolean;
   /** The Google service name (e.g. "gmail", "calendar", "drive"). */
   google_service: string;
+  /**
+   * The manifest service this tool was split off from, when it is not its own service.
+   *
+   * `gmail-send.yaml` is the outbound half of gmail: a separate TOOL, so the client can
+   * gate it on its own, but the same SERVICE. Its operations run through gmail's patch
+   * and are authorized against gmail's scope map, so a read-only gmail account is refused
+   * a send exactly as it was before the split. Absent means the file key is the service.
+   */
+  parent_service?: string;
+  /**
+   * Ask the client for a person's approval on EVERY call to this tool.
+   *
+   * Emitted as `_meta["anthropic/requiresUserInteraction"]`. Claude Code honours it in
+   * every permission mode, bypassPermissions included, offers no "don't ask again", and
+   * lets no allow rule skip it. The approval happens outside the model, so a model that
+   * was talked into sending by the mail it just read still cannot send unseen.
+   *
+   * The server enforces the other half: a tool marked this way cannot be reached from
+   * inside bulk_operations, where only the outer call would be prompted.
+   */
+  requires_user_interaction?: boolean;
   operations: Record<string, OperationDef>;
 }
 
@@ -147,6 +168,8 @@ export interface GeneratedToolSchema {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Passed through on tools/list. See ServiceDef.requires_user_interaction. */
+  _meta?: Record<string, unknown>;
 }
 
 /** A generated handler function. */

@@ -12,6 +12,7 @@ describe('tool registry', () => {
     expect(names).toContain('queue_operations');  // the alias, ADR-308
     // Factory-generated tools
     expect(names).toContain('manage_email');
+    expect(names).toContain('send_email');
     expect(names).toContain('manage_calendar');
     expect(names).toContain('manage_drive');
     expect(names).toContain('manage_sheets');
@@ -44,9 +45,13 @@ describe('tool registry', () => {
     const bulk = getToolSchema('bulk_operations')!;
     const offered = (bulk.inputSchema as any).properties.operations.items.properties.tool.enum as string[];
 
-    // Every tool, with no carve-out — including bulk_operations itself and the alias.
-    // Nesting is bounded by depth in handleQueue, not by hiding the tool here.
-    expect([...offered].sort()).toEqual([...toolSchemas.map(t => t.name)].sort());
+    // Every tool but the one carve-out — including bulk_operations itself and the alias.
+    // Nesting is bounded by depth in handleQueue, not by hiding the tool here. send_email
+    // is left out because the user approves each call, and inside a queue only the bulk
+    // call is shown to them.
+    const expected = toolSchemas.map(t => t.name).filter(name => name !== 'send_email');
+    expect([...offered].sort()).toEqual([...expected].sort());
+    expect(offered).not.toContain('send_email');
     expect(offered).toContain('manage_contacts');
     expect(offered).toContain('bulk_operations');
     expect(offered).toContain('queue_operations');
@@ -71,8 +76,6 @@ describe('manage_email schema', () => {
     // Core operations present (manifest may expand)
     expect(props.operation.enum).toContain('search');
     expect(props.operation.enum).toContain('read');
-    expect(props.operation.enum).toContain('send');
-    expect(props.operation.enum).toContain('reply');
     expect(props.operation.enum).toContain('triage');
     expect(props.operation.enum).toContain('listDrafts');
     expect(props.operation.enum).toContain('deleteDraft');
@@ -89,11 +92,49 @@ describe('manage_email schema', () => {
     expect(required).toContain('email');
   });
 
+  it('sends nothing, and says where sending went', () => {
+    for (const op of ['send', 'reply', 'replyAll', 'forward']) {
+      expect(props.operation.enum).not.toContain(op);
+    }
+    expect(tool._meta).toBeUndefined();
+    expect(tool.description).toContain('send_email');
+  });
+
+  it('offers no way to make a filter forward mail', () => {
+    expect(props.forwardTo).toBeUndefined();
+  });
+});
+
+describe('send_email schema', () => {
+  const tool = getToolSchema('send_email')!;
+  const props = (tool.inputSchema as any).properties;
+
+  it('carries exactly the outbound operations', () => {
+    expect([...props.operation.enum].sort()).toEqual(['forward', 'reply', 'replyAll', 'send']);
+  });
+
+  it('asks the client for approval on every call', () => {
+    expect(tool._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
+  });
+
+  it('requires the account it sends from', () => {
+    expect((tool.inputSchema as any).required).toContain('email');
+  });
+
   it('exposes from for Gmail send aliases', () => {
     expect(props.from).toMatchObject({
       type: 'string',
     });
     expect(props.from.description).toContain('Send As alias');
+  });
+});
+
+describe('manage_scratchpad schema', () => {
+  const props = (getToolSchema('manage_scratchpad')!.inputSchema as any).properties;
+
+  it('can save mail as a draft but not send it', () => {
+    expect(props.target.enum).toContain('email_draft');
+    expect(props.target.enum).not.toContain('email');
   });
 });
 
@@ -130,6 +171,7 @@ describe('bulk_operations schema', () => {
     expect(toolEnum).toContain('manage_calendar');
     expect(toolEnum).toContain('manage_drive');
     expect(toolEnum).toContain('manage_accounts');
+    expect(toolEnum).not.toContain('send_email');
   });
 });
 

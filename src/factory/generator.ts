@@ -105,7 +105,10 @@ export function generateTools(
 ): GeneratedTool[] {
   const tools: GeneratedTool[] = [];
 
-  for (const [serviceName, serviceDef] of Object.entries(manifest.services)) {
+  for (const [fileKey, serviceDef] of Object.entries(manifest.services)) {
+    // A split-off tool (gmail-send) is its parent service in everything but its name:
+    // the parent's patch handles its operations, the parent's scopes authorize them.
+    const serviceName = serviceDef.parent_service ?? fileKey;
     const patch = patches?.[serviceName];
     const schema = generateSchema(serviceDef);
     const handler = generateHandler(serviceDef, patch, serviceName);
@@ -114,6 +117,9 @@ export function generateTools(
 
   return tools;
 }
+
+/** The `_meta` key Claude Code reads to prompt on every call, in every permission mode. */
+export const REQUIRES_USER_INTERACTION = 'anthropic/requiresUserInteraction';
 
 /** Generate the JSON Schema tool definition from a service declaration. */
 export function generateSchema(service: ServiceDef): GeneratedToolSchema {
@@ -164,6 +170,10 @@ export function generateSchema(service: ServiceDef): GeneratedToolSchema {
       required,
       additionalProperties: false,
     },
+    // Must be the JSON Boolean true — Claude Code ignores any other value.
+    ...(service.requires_user_interaction === true
+      ? { _meta: { [REQUIRES_USER_INTERACTION]: true } }
+      : {}),
   };
 }
 
@@ -182,6 +192,7 @@ export function generateHandler(
   // Map tool_name to the next-steps domain key
   const domainMap: Record<string, string> = {
     manage_email: 'email',
+    send_email: 'email',
     manage_calendar: 'calendar',
     manage_drive: 'drive',
   };

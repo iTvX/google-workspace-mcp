@@ -58,7 +58,6 @@ describe('a read-only account', () => {
   // One case per target that reaches Google. `workspace` is excluded on purpose: it
   // writes a local file and touches no Google API.
   const targets: Array<[string, Record<string, string>, string]> = [
-    ['email',          { to: 'a@b.com', subject: 's' },        'gmail'],
     ['email_draft',    { to: 'a@b.com', subject: 's' },        'gmail'],
     ['doc_create',     { title: 't' },                          'docs'],
     ['doc_write',      { documentId: 'd1' },                    'docs'],
@@ -97,15 +96,38 @@ describe('a read/write account', () => {
     grant(['docs', 'gmail', 'tasks', 'calendar', 'sheets'], 'readwrite');
   });
 
-  it('sends as before — the policy is a no-op', async () => {
+  it('saves a draft as before — the policy is a no-op', async () => {
+    const id = scratchpadWith('content');
+    const result = await handleScratchpad({
+      operation: 'send', scratchpadId: id, target: 'email_draft',
+      targetParams: { email: ACCOUNT, to: 'a@b.com', subject: 's' },
+    });
+
+    expect(result.text).not.toContain('Blocked by safety policy');
+    expect(sendMail).toHaveBeenCalledWith(ACCOUNT, expect.objectContaining({ draft: true }));
+  });
+});
+
+describe('sending mail from a scratchpad', () => {
+  // send_email is the only way mail leaves the account, because it is the only tool the
+  // user approves call by call. A scratchpad send would go out on a scratchpad id, with
+  // the text nowhere in front of the user.
+  beforeEach(() => {
+    configurePolicies([accountAccess]);
+    grant(['gmail'], 'readwrite');
+  });
+
+  it('is refused for a fully authorized account, pointing at draft and send_email', async () => {
     const id = scratchpadWith('content');
     const result = await handleScratchpad({
       operation: 'send', scratchpadId: id, target: 'email',
       targetParams: { email: ACCOUNT, to: 'a@b.com', subject: 's' },
     });
 
-    expect(result.text).not.toContain('Blocked by safety policy');
-    expect(sendMail).toHaveBeenCalled();
+    expect(result.text).toContain('does not send mail');
+    expect(result.text).toContain('email_draft');
+    expect(result.text).toContain('send_email');
+    expect(sendMail).not.toHaveBeenCalled();
   });
 });
 
@@ -116,17 +138,6 @@ describe('the draft-only-email bypass', () => {
   beforeEach(() => {
     configurePolicies([draftOnlyEmail]);
     grant(['gmail'], 'readwrite');
-  });
-
-  it('no longer lets scratchpad send mail the policy forbids', async () => {
-    const id = scratchpadWith('content');
-    const result = await handleScratchpad({
-      operation: 'send', scratchpadId: id, target: 'email',
-      targetParams: { email: ACCOUNT, to: 'a@b.com', subject: 's' },
-    });
-
-    expect(result.text).toContain('Blocked by safety policy');
-    expect(sendMail).not.toHaveBeenCalled();
   });
 
   it('still allows a draft, which is what the policy permits', async () => {

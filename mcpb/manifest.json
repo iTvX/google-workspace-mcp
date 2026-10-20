@@ -46,7 +46,11 @@
     },
     {
       "name": "manage_email",
-      "description": "Search, read, send, forward, trash, label, and manage Gmail messages and threads"
+      "description": "Search, read, trash, label, and manage Gmail messages, threads, drafts and filters"
+    },
+    {
+      "name": "send_email",
+      "description": "Send, reply, reply-all, or forward Gmail messages; the user approves every message"
     },
     {
       "name": "manage_calendar",

@@ -121,6 +121,36 @@ export const draftOnlyEmail: SafetyPolicy = {
 };
 
 /**
+ * No-auto-forward policy — a filter may never forward mail. Always on, like account-access.
+ *
+ * A forwarding filter is outbound mail with nobody in the loop: once created, it sends
+ * every future match to the address, for as long as it exists. That is the one way to
+ * send mail that send_email's per-message approval cannot see, so it is refused outright
+ * rather than left to a deployment opt-in. draft-only-email blocks it too, but only when
+ * someone remembered to turn that on.
+ *
+ * `forwardTo` is no longer in the filter schemas; this catches a caller that sends it
+ * anyway, because the server does not reject undeclared arguments on its own. The
+ * preview is refused as well, so no token is ever issued for a forwarding filter.
+ */
+export const noAutoForward: SafetyPolicy = {
+  name: 'no-auto-forward',
+  description: 'Block filters that forward mail — always on',
+  applies: (service, operation) =>
+    service === 'gmail' && ['previewFilter', 'createFilter', 'updateFilter'].includes(operation),
+  evaluate: (_args, ctx) => {
+    const forwardTo = String(ctx.params.forwardTo ?? '').trim();
+    if (!forwardTo) return { action: 'allow' };
+    return {
+      action: 'block',
+      reason: `Filters cannot forward mail here: this one would send every future match to ${forwardTo} ` +
+        `with nobody approving any of them. Filters that label, archive or mark mail are allowed. ` +
+        `To send a message, use send_email, which asks the user to approve it.`,
+    };
+  },
+};
+
+/**
  * No-delete policy — blocks permanent deletion across all services.
  * Trash is allowed (reversible), but delete is blocked (permanent).
  */

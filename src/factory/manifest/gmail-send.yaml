@@ -1,0 +1,115 @@
+# Outbound mail, split off from gmail.yaml so it can be its own TOOL.
+#
+# Everything that makes mail leave the account lives here and nowhere else. The tool is
+# marked requires_user_interaction, so the client asks a person to approve every call —
+# in every permission mode, with no "don't ask again" — and shows them the exact
+# arguments: the account it goes out from, the recipients, the subject and the body.
+#
+# It is still the gmail SERVICE (parent_service): gmailPatch handles these operations and
+# gmail's scopes authorize them, so per-account read-only access and every
+# GWS_SAFETY_POLICY (draft-only-email included) apply exactly as before the split.
+tool_name: send_email
+description: "Send mail from a Gmail account: a new message, a reply, a reply-all, or a forward. EVERY call asks the user to approve it before anything is sent, so put the complete final text in the call — the user approves exactly what they see. `email` is the account the message is sent FROM. To prepare mail for the user to review and send themselves, without an approval prompt, create a draft with manage_scratchpad (target email_draft) instead."
+requires_email: true
+google_service: gmail
+parent_service: gmail
+requires_user_interaction: true
+operations:
+
+  send:
+    type: action
+    description: "compose and send a new email (creates draft when attachments present, 35MB attachment limit via upload endpoint)"
+    params:
+      to:
+        type: string
+        description: "Recipient email(s), comma-separated"
+        required: true
+      subject:
+        type: string
+        description: "Email subject line"
+        required: true
+      body:
+        type: string
+        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
+        required: true
+      from:
+        type: string
+        description: "Sender email or RFC 2822 mailbox for a verified Gmail Send As alias"
+      cc:
+        type: string
+        description: "CC email(s), comma-separated. On `replyAll` these are ADDITIONAL — they do not replace the recipients already on the thread."
+      bcc:
+        type: string
+        description: "BCC email(s), comma-separated"
+      attachments:
+        type: string
+        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
+      html:
+        type: boolean
+        description: "Treat body as HTML content (default: plain text)"
+      draft:
+        type: boolean
+        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
+
+  reply:
+    type: action
+    description: "reply to a message (thread-aware, creates draft when attachments present)"
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+      body:
+        type: string
+        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
+        required: true
+      attachments:
+        type: string
+        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
+      html:
+        type: boolean
+        description: "Treat body as HTML content (default: plain text)"
+      draft:
+        type: boolean
+        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
+
+  replyAll:
+    type: action
+    description: "reply-all to a message (thread-aware, includes all recipients, creates draft when attachments present)"
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+      body:
+        type: string
+        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."
+        required: true
+      cc:
+        type: string
+        description: "CC email(s), comma-separated. On `replyAll` these are ADDITIONAL — they do not replace the recipients already on the thread."
+      attachments:
+        type: string
+        description: "Workspace filenames to attach, comma-separated (files must exist in workspace via manage_workspace). Creates draft when present."
+      html:
+        type: boolean
+        description: "Treat body as HTML content (default: plain text)"
+      draft:
+        type: boolean
+        description: "Save as draft instead of sending (default: false, forced true when attachments present)"
+
+  forward:
+    type: action
+    description: "forward a message to new recipients (includes original attachments by default)"
+    params:
+      messageId:
+        type: string
+        description: "Email message ID"
+        required: true
+      to:
+        type: string
+        description: "Recipient email(s), comma-separated"
+        required: true
+      body:
+        type: string
+        description: "Email body text. On `forward`, an optional note prepended ABOVE the forwarded message."

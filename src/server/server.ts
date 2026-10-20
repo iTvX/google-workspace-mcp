@@ -18,6 +18,7 @@ import {
   configurePolicies,
   getActivePolicies,
   accountAccess,
+  noAutoForward,
   draftOnlyEmail,
   noDelete,
   readOnly,
@@ -37,12 +38,17 @@ function log(msg: string): void {
  * (ADR-202), so gating it behind an operator opt-in would make that choice decorative.
  * It is a no-op for read/write accounts, which is every account by default.
  *
+ * `no-auto-forward` is always active too: a forwarding filter is outbound mail that no
+ * one approves, the one way around send_email's per-message approval.
+ *
  * Everything else is opt-in through GWS_SAFETY_POLICY.
  */
+const ALWAYS_ON: SafetyPolicy[] = [accountAccess, noAutoForward];
+
 function initSafetyPolicies(): void {
   const policyEnv = process.env.GWS_SAFETY_POLICY || '';
   if (!policyEnv) {
-    configurePolicies([accountAccess]);
+    configurePolicies(ALWAYS_ON);
     return;
   }
 
@@ -63,7 +69,7 @@ function initSafetyPolicies(): void {
     );
   }
 
-  configurePolicies([accountAccess, ...names.map(name => policyMap[name])]);
+  configurePolicies([...ALWAYS_ON, ...names.map(name => policyMap[name])]);
 }
 
 export function createServer(): Server {
@@ -89,6 +95,9 @@ export function createServer(): Server {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        // send_email's requiresUserInteraction rides here; dropping it would silently
+        // turn every send back into an unprompted call.
+        ...(tool._meta ? { _meta: tool._meta } : {}),
       })),
     };
   });

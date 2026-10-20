@@ -100,6 +100,17 @@ describe('createServer', () => {
         expect(tool).toHaveProperty('inputSchema');
       }
     });
+
+    it('tells the client that send_email needs a person on every call', async () => {
+      // The approval prompt is the client's doing, and this is the only thing that asks
+      // for it. Rebuilding the tool objects without _meta would make every send silent.
+      const result = await listToolsHandler({});
+      const send = result.tools.find((t: any) => t.name === 'send_email');
+      expect(send._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
+
+      const marked = result.tools.filter((t: any) => t._meta?.['anthropic/requiresUserInteraction']);
+      expect(marked.map((t: any) => t.name)).toEqual(['send_email']);
+    });
   });
 
   describe('CallTool handler', () => {

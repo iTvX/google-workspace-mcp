@@ -121,7 +121,8 @@ flowchart LR
 
 | Tool | What It Does |
 |------|--------------|
-| `manage_email` | Gmail — search, read (plain or sanitized HTML), send, reply / reply-all, forward, triage, trash, drafts (list / delete), labels, threads, attachments |
+| `manage_email` | Gmail — search, read (plain or sanitized HTML), triage, trash, drafts (list / delete), labels, filters (never forwarding), threads, attachments |
+| `send_email` | Gmail — send, reply / reply-all, forward. Marked `anthropic/requiresUserInteraction`, so Claude Code asks you to approve every message, in every permission mode; it cannot run inside `bulk_operations` |
 | `manage_calendar` | Calendar — list, agenda, get, create, quickAdd (natural language), update, delete, calendars, freebusy |
 | `manage_drive` | Drive — search, get, upload, download, copy, rename / move, delete, export, permissions, comments, view images |
 | `manage_sheets` | Sheets — read / write ranges (row-numbered output), append, clear, manage tabs, copy / duplicate / rename |

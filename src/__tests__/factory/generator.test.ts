@@ -134,7 +134,9 @@ describe('manifest type vs the HTTP verb Google uses', () => {
     const manifest = loadManifest();
     const found: Record<string, string> = {};
 
-    for (const [serviceName, service] of Object.entries(manifest.services)) {
+    for (const [fileKey, service] of Object.entries(manifest.services)) {
+      // Keyed by SERVICE: send_email's operations are still gmail's (gmail-send.yaml).
+      const serviceName = service.parent_service ?? fileKey;
       for (const [opName, op] of Object.entries(service.operations)) {
         if (!op.resource) found[`${serviceName}.${opName}`] = op.type;
       }
@@ -332,13 +334,32 @@ describe('generateSchema', () => {
     // Core operations present (manifest may expand)
     expect(props.operation.enum).toContain('search');
     expect(props.operation.enum).toContain('read');
-    expect(props.operation.enum).toContain('send');
-    expect(props.operation.enum).toContain('reply');
     expect(props.operation.enum).toContain('triage');
-    expect(props.operation.enum).toContain('forward');
     expect(props.operation.enum).toContain('trash');
     expect(props.operation.enum).toContain('labels');
     expect(props.operation.enum).toContain('createLabel');
+  });
+
+  it('keeps every outbound operation out of manage_email and in send_email', () => {
+    // The whole point of the split: the tool the client lets run unprompted can make no
+    // mail leave the account. Equality on send_email, so a new outbound operation has to
+    // be placed deliberately rather than landing in whichever file was open.
+    const outbound = ['send', 'reply', 'replyAll', 'forward'];
+    const email = generateSchema(manifest.services.gmail).inputSchema.properties as Record<string, any>;
+    const send = generateSchema(manifest.services['gmail-send']).inputSchema.properties as Record<string, any>;
+
+    for (const op of outbound) expect(email.operation.enum).not.toContain(op);
+    expect([...send.operation.enum].sort()).toEqual([...outbound].sort());
+  });
+
+  it('marks send_email, and only send_email, as needing a person on every call', () => {
+    const marked = Object.values(manifest.services)
+      .map((service) => generateSchema(service))
+      .filter((schema) => schema._meta?.['anthropic/requiresUserInteraction'] !== undefined);
+
+    expect(marked.map((schema) => schema.name)).toEqual(['send_email']);
+    // The JSON Boolean true, exactly: Claude Code ignores any other value.
+    expect(marked[0]._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
   });
 
   it('includes email param when requires_email is true', () => {
@@ -355,10 +376,12 @@ describe('generateSchema', () => {
     expect(props.maxResults).toBeDefined();
     // From read
     expect(props.messageId).toBeDefined();
+
+    const send = generateSchema(manifest.services['gmail-send']).inputSchema.properties as Record<string, any>;
     // From send
-    expect(props.to).toBeDefined();
-    expect(props.subject).toBeDefined();
-    expect(props.body).toBeDefined();
+    expect(send.to).toBeDefined();
+    expect(send.subject).toBeDefined();
+    expect(send.body).toBeDefined();
   });
 
   it('sets additionalProperties: false', () => {
@@ -501,7 +524,7 @@ describe('generateHandler', () => {
     // Gmail send is a custom handler: it builds an RFC 5322 message and uploads it
     // to users.messages.send. Nothing shells out.
     mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
-    const handler = generateHandler(manifest.services.gmail, patches.gmail);
+    const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
     const result = await handler({
       operation: 'send',
@@ -528,7 +551,7 @@ describe('generateHandler', () => {
     // alias only ever meant one thing: the From header of the message Gmail sends.
     // So assert it lands there.
     mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
-    const handler = generateHandler(manifest.services.gmail, patches.gmail);
+    const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
     await handler({
       operation: 'send',
@@ -599,7 +622,7 @@ describe('generateHandler', () => {
     ])('%s attaches workspace files and forces draft', async (operation) => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'draft-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       const result = await handler({
         operation,
@@ -640,7 +663,7 @@ describe('generateHandler', () => {
     ])('%s passes html flag through', async (operation) => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       await handler({
         operation,
@@ -663,7 +686,7 @@ describe('generateHandler', () => {
     ])('%s sends live when no attachments and no draft flag', async (operation) => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       const result = await handler({
         operation,
@@ -687,7 +710,7 @@ describe('generateHandler', () => {
     ])('%s honours an explicit draft flag with no attachments', async (operation) => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'draft-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       const result = await handler({
         operation,
@@ -710,7 +733,7 @@ describe('generateHandler', () => {
       // rather than start a new one, so they get asserted.
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'sent-1', threadId: 'thread-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       await handler({ operation, email: 'u@t.com', messageId: 'msg-1', body: 'ok' });
 
@@ -723,7 +746,7 @@ describe('generateHandler', () => {
     it('replyAll still passes cc alongside attachments', async () => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'draft-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       await handler({
         operation: 'replyAll',
@@ -751,7 +774,7 @@ describe('generateHandler', () => {
     ])('%s rejects an attachment outside the workspace', async (operation) => {
       mockOriginal();
       mockUpload.mockResolvedValue({ id: 'draft-1' });
-      const handler = generateHandler(manifest.services.gmail, patches.gmail);
+      const handler = generateHandler(manifest.services['gmail-send'], patches.gmail);
 
       await expect(
         handler({

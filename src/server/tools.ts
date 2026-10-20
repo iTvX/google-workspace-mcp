@@ -6,11 +6,13 @@
  */
 
 import { generatedTools } from '../factory/registry.js';
+import { REQUIRES_USER_INTERACTION } from '../factory/generator.js';
 
 export interface ToolSchema {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
 }
 
 // Hand-coded tools that don't go through the factory
@@ -67,7 +69,7 @@ const handCodedSchemas: ToolSchema[] = [
   },
   {
     name: 'manage_scratchpad',
-    description: 'Compose, edit, and deliver text content. Use for any multi-line content: emails, documents, descriptions. Compose in the scratchpad, edit by line or JSON path, attach files, then send to any target. For short one-liners, use the service tool directly instead.',
+    description: 'Compose, edit, and deliver text content. Use for any multi-line content: emails, documents, descriptions. Compose in the scratchpad, edit by line or JSON path, attach files, then send to any target. Mail goes out only as a Gmail draft from here; to actually send it, pass the final text to send_email. For short one-liners, use the service tool directly instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,8 +107,8 @@ const handCodedSchemas: ToolSchema[] = [
         // import
         sourceParams: { type: 'object', description: 'For import: source-specific parameters (e.g., { documentId, mode } for doc, { messageId } for email)' },
         // send
-        target: { type: 'string', enum: ['email', 'email_draft', 'doc_create', 'doc_write', 'workspace', 'sheet_write', 'calendar_event', 'task_create'], description: 'For send: delivery target' },
-        targetParams: { type: 'object', description: 'For send: target-specific parameters (e.g., { email, to, subject } for email, { filename } for workspace)' },
+        target: { type: 'string', enum: ['email_draft', 'doc_create', 'doc_write', 'workspace', 'sheet_write', 'calendar_event', 'task_create'], description: 'For send: delivery target. Mail can only be saved as a draft here (email_draft); sending is send_email, which the user approves.' },
+        targetParams: { type: 'object', description: 'For send: target-specific parameters (e.g., { email, to, subject } for email_draft, { filename } for workspace)' },
         keep: { type: 'boolean', description: 'For send: keep scratchpad after successful send (default: true)' },
       },
       required: ['operation'],
@@ -216,23 +218,37 @@ export const toolSchemas: ToolSchema[] = [
 ];
 
 /**
- * Point queue_operations at every tool this server advertises — itself included.
+ * Whether the client must ask a person to approve every call to this tool (send_email).
+ *
+ * Such a tool is approved per call by the CLIENT, which only ever sees the outermost
+ * call. Run from inside bulk_operations it would be approved as part of the bulk call —
+ * which is to say, not at all — so the queue refuses it (see handler.ts).
+ */
+export function requiresUserInteraction(name: string): boolean {
+  return toolSchemas.find(t => t.name === name)?._meta?.[REQUIRES_USER_INTERACTION] === true;
+}
+
+/**
+ * Point queue_operations at every tool this server advertises — itself included — except
+ * the ones a person must approve call by call.
  *
  * Done here rather than in the literal above because the factory schemas are not built
  * until `generatedTools` has run, and queue_operations is declared alongside the
  * hand-coded tools that come first.
  *
- * There is no carve-out. A queue is a tool call, so the tools a queue may name are the
- * tools; nesting is bounded by depth in handleQueue, which answers with a sentence saying
- * what the limit is, rather than by omission here, which would answer a plainly
- * advertised tool with "Unknown tool".
+ * Otherwise there is no carve-out. A queue is a tool call, so the tools a queue may name
+ * are the tools; nesting is bounded by depth in handleQueue, which answers with a
+ * sentence saying what the limit is. The approval-gated tools are left out of the enum so
+ * an agent is not invited to try, and refused with a sentence if it names one anyway.
  */
 const bulkTool = handCodedSchemas.find(t => t.name === 'bulk_operations');
 if (bulkTool) {
   const operations = (bulkTool.inputSchema.properties as Record<string, { items: { properties: { tool: { enum: string[] } } } }>).operations;
   // The alias shares this inputSchema object by reference, so it is filled by the same
   // assignment and cannot disagree about which tools exist.
-  operations.items.properties.tool.enum = toolSchemas.map(t => t.name);
+  operations.items.properties.tool.enum = toolSchemas
+    .map(t => t.name)
+    .filter(name => !requiresUserInteraction(name));
 }
 
 export function getToolSchema(name: string): ToolSchema | undefined {

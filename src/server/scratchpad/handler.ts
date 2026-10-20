@@ -7,7 +7,7 @@ import { ScratchpadManager, type LiveBinding } from './manager.js';
 import { translateMutation, isRejection, type DocsSyncIntent } from './docs-sync.js';
 import * as fs from 'node:fs/promises';
 import {
-  sendEmail, sendEmailDraft, sendDocCreate, sendDocWrite, sendWorkspace,
+  sendEmailDraft, sendDocCreate, sendDocWrite, sendWorkspace,
   sendSheetWrite, sendCalendarEvent, sendTaskCreate,
   importEmail, importDoc, importSheet, importDriveFile, importMeet,
 } from './adapters/index.js';
@@ -37,7 +37,6 @@ import type { HandlerResponse } from '../handler.js';
  * Google API, so there is nothing to authorize.
  */
 const WRITE_INTENT: Record<string, OperationInfo & { operation: string }> = {
-  email:          { operation: 'send',   service: 'gmail',    googleService: 'gmail',    resource: 'users.messages.send',        type: 'action' },
   email_draft:    { operation: 'create', service: 'gmail',    googleService: 'gmail',    resource: 'users.drafts.create',        type: 'action' },
   doc_create:     { operation: 'create', service: 'docs',     googleService: 'docs',     resource: 'documents.create',           type: 'action' },
   doc_write:      { operation: 'write',  service: 'docs',     googleService: 'docs',     resource: 'documents.batchUpdate',      type: 'action' },
@@ -608,7 +607,17 @@ async function handleSend(params: Record<string, unknown>): Promise<HandlerRespo
   if (!id) return scratchpadNotFound(params.scratchpadId as string);
 
   const target = params.target as string | undefined;
-  if (!target) return error('target is required for send (email, email_draft, doc_create, doc_write, workspace).');
+  if (!target) return error('target is required for send (email_draft, doc_create, doc_write, workspace).');
+
+  // Sending mail is send_email's alone, where the user approves each message and sees
+  // the text they are approving. A scratchpad send would go out on the strength of a
+  // scratchpad id, with the content nowhere in the approval — or with no approval at all.
+  if (target === 'email') {
+    return error(
+      'manage_scratchpad does not send mail. Save it as a draft with target email_draft, or view ' +
+      'the scratchpad and pass its text as body to send_email, which asks the user to approve it.',
+    );
+  }
 
   const targetParams = (params.targetParams ?? {}) as Record<string, string>;
   const keep = params.keep !== false; // default true
@@ -620,9 +629,6 @@ async function handleSend(params: Record<string, unknown>): Promise<HandlerRespo
   let result: HandlerResponse;
 
   switch (target) {
-    case 'email':
-      result = await sendEmail(scratchpads, id, targetParams as unknown as Parameters<typeof sendEmail>[2]);
-      break;
     case 'email_draft':
       result = await sendEmailDraft(scratchpads, id, targetParams as unknown as Parameters<typeof sendEmailDraft>[2]);
       break;
@@ -645,7 +651,7 @@ async function handleSend(params: Record<string, unknown>): Promise<HandlerRespo
       result = await sendTaskCreate(scratchpads, id, targetParams as unknown as Parameters<typeof sendTaskCreate>[2]);
       break;
     default:
-      return error(`Unknown send target: ${target}. Valid targets: email, email_draft, doc_create, doc_write, workspace, sheet_write, calendar_event, task_create.`);
+      return error(`Unknown send target: ${target}. Valid targets: email_draft, doc_create, doc_write, workspace, sheet_write, calendar_event, task_create.`);
   }
 
   // Discard scratchpad on success if keep=false
