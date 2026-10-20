@@ -164,8 +164,11 @@ export const noDelete: SafetyPolicy = {
     // Task/tasklist delete is permanent
     // Calendar delete is permanent
     const permanentDeletes: Record<string, string[]> = {
-      // 'trash' is reversible, which is fine; drafts have no trash, so deleteDraft is permanent
-      gmail: ['deleteDraft'],
+      // Nothing in Gmail: 'trash' is reversible, and the scopes held cannot delete mail
+      // outright. deleteDraft is permanent but is left alone on purpose: a draft is unsent
+      // text that no one has received, and the Gmail connector deletes drafts too. Blocking
+      // it made "delete that draft" fail in a deployment that only wanted mail kept safe.
+      gmail: [],
       calendar: ['delete'],
       drive: ['delete'],
       tasks: ['delete', 'deleteTaskList'],
