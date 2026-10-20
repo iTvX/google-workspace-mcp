@@ -107,7 +107,7 @@ const handCodedSchemas: ToolSchema[] = [
         // import
         sourceParams: { type: 'object', description: 'For import: source-specific parameters (e.g., { documentId, mode } for doc, { messageId } for email)' },
         // send
-        target: { type: 'string', enum: ['email_draft', 'doc_create', 'doc_write', 'workspace', 'sheet_write', 'calendar_event', 'task_create'], description: 'For send: delivery target. Mail can only be saved as a draft here (email_draft); sending is send_email, which the user approves.' },
+        target: { type: 'string', enum: ['email_draft', 'doc_create', 'doc_write', 'workspace', 'sheet_write', 'calendar_event', 'task_create'], description: 'For send: delivery target. Mail can only be saved as a draft here (email_draft); sending is send_email.' },
         targetParams: { type: 'object', description: 'For send: target-specific parameters (e.g., { email, to, subject } for email_draft, { filename } for workspace)' },
         keep: { type: 'boolean', description: 'For send: keep scratchpad after successful send (default: true)' },
       },
@@ -218,7 +218,8 @@ export const toolSchemas: ToolSchema[] = [
 ];
 
 /**
- * Whether the client must ask a person to approve every call to this tool (send_email).
+ * Whether the client must ask a person to approve every call to this tool — a manifest
+ * marked requires_user_interaction. None is today; gmail-send.yaml says how to turn it on.
  *
  * Such a tool is approved per call by the CLIENT, which only ever sees the outermost
  * call. Run from inside bulk_operations it would be approved as part of the bulk call —

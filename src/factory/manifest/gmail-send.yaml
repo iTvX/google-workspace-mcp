@@ -1,19 +1,23 @@
 # Outbound mail, split off from gmail.yaml so it can be its own TOOL.
 #
-# Everything that makes mail leave the account lives here and nowhere else. The tool is
-# marked requires_user_interaction, so the client asks a person to approve every call —
-# in every permission mode, with no "don't ask again" — and shows them the exact
-# arguments: the account it goes out from, the recipients, the subject and the body.
+# Everything that makes mail leave the account lives here and nowhere else, so outbound
+# mail is one tool to gate, audit or switch off.
+#
+# Sends go out without a per-call approval prompt, the same as the claude.ai Gmail
+# connector: Claude Code can only show that prompt in the desktop app, not on a phone
+# over Remote Control. To require a person's approval on every send again (in every
+# permission mode, bypassPermissions included), add `requires_user_interaction: true`
+# below; bulk_operations then refuses this tool too, since only the outer call would be
+# prompted.
 #
 # It is still the gmail SERVICE (parent_service): gmailPatch handles these operations and
 # gmail's scopes authorize them, so per-account read-only access and every
 # GWS_SAFETY_POLICY (draft-only-email included) apply exactly as before the split.
 tool_name: send_email
-description: "Send mail from a Gmail account: a new message, a reply, a reply-all, or a forward. EVERY call asks the user to approve it before anything is sent, so put the complete final text in the call — the user approves exactly what they see. `email` is the account the message is sent FROM. To prepare mail for the user to review and send themselves, without an approval prompt, create a draft with manage_scratchpad (target email_draft) instead."
+description: "Send mail from a Gmail account: a new message, a reply, a reply-all, or a forward. It sends immediately, so call it only for a message the user asked for, with the complete final text. `email` is the account the message is sent FROM. To prepare mail for the user to review and send themselves, create a draft with manage_scratchpad (target email_draft) instead."
 requires_email: true
 google_service: gmail
 parent_service: gmail
-requires_user_interaction: true
 operations:
 
   send:

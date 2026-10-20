@@ -48,7 +48,7 @@ const suggestions: Record<string, Record<string, NextStep[]>> = {
       { description: 'Narrow search', tool: 'manage_email', example: { operation: 'search', email: '<email>', query: '<refined query>' } },
     ],
     read: [
-      { description: 'Reply to this email (the user approves it)', tool: 'send_email', example: { operation: 'reply', email: '<email>', messageId: '<messageId>', body: '<reply text>' } },
+      { description: 'Reply to this email', tool: 'send_email', example: { operation: 'reply', email: '<email>', messageId: '<messageId>', body: '<reply text>' } },
       { description: 'Import into scratchpad for editing', tool: 'manage_scratchpad', example: { operation: 'import', source: 'email', sourceParams: { email: '<email>', messageId: '<messageId>' } } },
       { description: 'Search for related emails', tool: 'manage_email', example: { operation: 'search', email: '<email>', query: 'thread:<threadId>' } },
     ],
@@ -64,11 +64,11 @@ const suggestions: Record<string, Record<string, NextStep[]>> = {
     ],
     listDrafts: [
       { description: 'Delete a draft', tool: 'manage_email', example: { operation: 'deleteDraft', email: '<email>', draftId: '<draftId from results>' } },
-      { description: 'Compose a new email (the user approves it)', tool: 'send_email', example: { operation: 'send', email: '<email>', to: '<recipient>', subject: '<subject>', body: '<body>' } },
+      { description: 'Compose a new email', tool: 'send_email', example: { operation: 'send', email: '<email>', to: '<recipient>', subject: '<subject>', body: '<body>' } },
     ],
     deleteDraft: [
       { description: 'List remaining drafts', tool: 'manage_email', example: { operation: 'listDrafts', email: '<email>' } },
-      { description: 'Compose a new email (the user approves it)', tool: 'send_email', example: { operation: 'send', email: '<email>', to: '<recipient>', subject: '<subject>', body: '<body>' } },
+      { description: 'Compose a new email', tool: 'send_email', example: { operation: 'send', email: '<email>', to: '<recipient>', subject: '<subject>', body: '<body>' } },
     ],
   },
   calendar: {

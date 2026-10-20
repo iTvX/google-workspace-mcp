@@ -1,17 +1,16 @@
 /**
- * send_email — the one way mail leaves the account, and every way around it closed.
+ * send_email — the one way mail leaves the account.
  *
- * Sending moved out of manage_email into its own tool so the client can ask a person to
- * approve each message (`anthropic/requiresUserInteraction`, see gmail-send.yaml). That
- * approval only means something if nothing else can send, so these tests drive the real
- * dispatcher — not a policy in isolation — and assert on the upload that would deliver
- * the message:
+ * Sending moved out of manage_email into its own tool, so outbound mail can be gated,
+ * audited or switched off in one place. It sends without a per-call prompt, like the
+ * claude.ai Gmail connector (send-approval-gate.test.ts covers turning one on). These
+ * tests drive the real dispatcher — not a policy in isolation — and assert on the upload
+ * that would deliver the message:
  *
- *   - send_email still works, and is still the gmail service to the safety layer;
+ *   - send_email works, and is still the gmail service to the safety layer;
  *   - the old manage_email operations are gone rather than quietly still routed;
- *   - bulk_operations cannot run send_email, in a queue or as a batch, because the
- *     client only sees, and only asks about, the outer bulk call;
- *   - a filter can never forward, since that sends every future match unapproved.
+ *   - bulk_operations can queue send_email but not batch it;
+ *   - a filter can never forward, since that sends every future match unasked.
  *
  * The session tracker reads a few counts through `call` on the first call per account,
  * so "nothing was sent" is asserted on `upload` (every send) and on the filter methods,
@@ -100,29 +99,18 @@ describe('manage_email', () => {
 });
 
 describe('bulk_operations', () => {
-  it('will not run send_email from a queue', async () => {
+  it('can queue send_email, since nothing gates it per call', async () => {
     const result = await handleToolCall('bulk_operations', {
       operations: [{ tool: 'send_email', args: SEND }],
     });
 
-    expect(result.text).toContain('cannot run inside bulk_operations');
-    expect(mockUpload).not.toHaveBeenCalled();
+    expect(result.text).not.toContain('cannot run inside bulk_operations');
+    expect(mockUpload).toHaveBeenCalledWith(
+      'gmail', 'users.messages.send', { userId: 'me' }, expect.objectContaining({ account: ACCOUNT }),
+    );
   });
 
-  it('will not run it from a queue nested inside a queue either', async () => {
-    const result = await handleToolCall('bulk_operations', {
-      operations: [{
-        tool: 'bulk_operations',
-        args: { operations: [{ tool: 'send_email', args: SEND }] },
-      }],
-      detail: 'full',
-    });
-
-    expect(result.text).toContain('cannot run inside bulk_operations');
-    expect(mockUpload).not.toHaveBeenCalled();
-  });
-
-  it('will not batch it', async () => {
+  it('will not batch it — there is no batch send', async () => {
     const result = await handleToolCall('bulk_operations', {
       mode: 'batch', tool: 'send_email', operation: 'send', email: ACCOUNT,
       items: [{ to: 'a@example.com' }, { to: 'b@example.com' }],

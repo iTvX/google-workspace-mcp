@@ -50,7 +50,7 @@
     },
     {
       "name": "send_email",
-      "description": "Send, reply, reply-all, or forward Gmail messages; the user approves every message"
+      "description": "Send, reply, reply-all, or forward Gmail messages"
     },
     {
       "name": "manage_calendar",

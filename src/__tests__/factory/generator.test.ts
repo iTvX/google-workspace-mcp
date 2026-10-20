@@ -341,9 +341,9 @@ describe('generateSchema', () => {
   });
 
   it('keeps every outbound operation out of manage_email and in send_email', () => {
-    // The whole point of the split: the tool the client lets run unprompted can make no
-    // mail leave the account. Equality on send_email, so a new outbound operation has to
-    // be placed deliberately rather than landing in whichever file was open.
+    // The whole point of the split: outbound mail is one tool, so it can be gated, audited
+    // or switched off in one place. Equality on send_email, so a new outbound operation
+    // has to be placed deliberately rather than landing in whichever file was open.
     const outbound = ['send', 'reply', 'replyAll', 'forward'];
     const email = generateSchema(manifest.services.gmail).inputSchema.properties as Record<string, any>;
     const send = generateSchema(manifest.services['gmail-send']).inputSchema.properties as Record<string, any>;
@@ -352,14 +352,19 @@ describe('generateSchema', () => {
     expect([...send.operation.enum].sort()).toEqual([...outbound].sort());
   });
 
-  it('marks send_email, and only send_email, as needing a person on every call', () => {
+  it('marks no shipped tool as needing a person on every call', () => {
+    // send_email sends unprompted, like the claude.ai Gmail connector — the prompt cannot
+    // be answered from a phone. Turning it back on is one line in gmail-send.yaml.
     const marked = Object.values(manifest.services)
       .map((service) => generateSchema(service))
-      .filter((schema) => schema._meta?.['anthropic/requiresUserInteraction'] !== undefined);
+      .filter((schema) => schema._meta !== undefined);
+    expect(marked.map((schema) => schema.name)).toEqual([]);
+  });
 
-    expect(marked.map((schema) => schema.name)).toEqual(['send_email']);
+  it('emits requiresUserInteraction for a manifest that asks for it', () => {
+    const gated = generateSchema({ ...manifest.services['gmail-send'], requires_user_interaction: true });
     // The JSON Boolean true, exactly: Claude Code ignores any other value.
-    expect(marked[0]._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
+    expect(gated._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
   });
 
   it('includes email param when requires_email is true', () => {

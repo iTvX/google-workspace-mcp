@@ -45,13 +45,11 @@ describe('tool registry', () => {
     const bulk = getToolSchema('bulk_operations')!;
     const offered = (bulk.inputSchema as any).properties.operations.items.properties.tool.enum as string[];
 
-    // Every tool but the one carve-out — including bulk_operations itself and the alias.
-    // Nesting is bounded by depth in handleQueue, not by hiding the tool here. send_email
-    // is left out because the user approves each call, and inside a queue only the bulk
-    // call is shown to them.
-    const expected = toolSchemas.map(t => t.name).filter(name => name !== 'send_email');
-    expect([...offered].sort()).toEqual([...expected].sort());
-    expect(offered).not.toContain('send_email');
+    // Every tool, with no carve-out — including bulk_operations itself and the alias.
+    // Nesting is bounded by depth in handleQueue, not by hiding the tool here. (A tool
+    // marked requires_user_interaction would be left out; none is today.)
+    expect([...offered].sort()).toEqual([...toolSchemas.map(t => t.name)].sort());
+    expect(offered).toContain('send_email');
     expect(offered).toContain('manage_contacts');
     expect(offered).toContain('bulk_operations');
     expect(offered).toContain('queue_operations');
@@ -113,8 +111,8 @@ describe('send_email schema', () => {
     expect([...props.operation.enum].sort()).toEqual(['forward', 'reply', 'replyAll', 'send']);
   });
 
-  it('asks the client for approval on every call', () => {
-    expect(tool._meta).toEqual({ 'anthropic/requiresUserInteraction': true });
+  it('sends without an approval gate, like the claude.ai Gmail connector', () => {
+    expect(tool._meta).toBeUndefined();
   });
 
   it('requires the account it sends from', () => {
@@ -171,7 +169,7 @@ describe('bulk_operations schema', () => {
     expect(toolEnum).toContain('manage_calendar');
     expect(toolEnum).toContain('manage_drive');
     expect(toolEnum).toContain('manage_accounts');
-    expect(toolEnum).not.toContain('send_email');
+    expect(toolEnum).toContain('send_email');
   });
 });
 

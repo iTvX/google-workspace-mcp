@@ -1,5 +1,5 @@
 tool_name: manage_email
-description: "Search, read, triage, label, archive, trash, and manage drafts and filters in a Google Workspace account. Supports Gmail search syntax. This tool sends nothing: sending, replying and forwarding are send_email, which asks the user to approve each message."
+description: "Search, read, triage, label, archive, trash, and manage drafts and filters in a Google Workspace account. Supports Gmail search syntax. This tool sends nothing: sending, replying and forwarding are send_email."
 requires_email: true
 google_service: gmail
 operations:

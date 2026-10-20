@@ -609,13 +609,13 @@ async function handleSend(params: Record<string, unknown>): Promise<HandlerRespo
   const target = params.target as string | undefined;
   if (!target) return error('target is required for send (email_draft, doc_create, doc_write, workspace).');
 
-  // Sending mail is send_email's alone, where the user approves each message and sees
-  // the text they are approving. A scratchpad send would go out on the strength of a
-  // scratchpad id, with the content nowhere in the approval — or with no approval at all.
+  // Sending mail is send_email's alone, so outbound mail has one path to gate, audit or
+  // switch off. A scratchpad send would be a second, out of reach of whatever gates
+  // send_email (requires_user_interaction, draft-only-email) the next time one is turned on.
   if (target === 'email') {
     return error(
       'manage_scratchpad does not send mail. Save it as a draft with target email_draft, or view ' +
-      'the scratchpad and pass its text as body to send_email, which asks the user to approve it.',
+      'the scratchpad and pass its text as body to send_email.',
     );
   }
 

@@ -38,8 +38,8 @@ function log(msg: string): void {
  * (ADR-202), so gating it behind an operator opt-in would make that choice decorative.
  * It is a no-op for read/write accounts, which is every account by default.
  *
- * `no-auto-forward` is always active too: a forwarding filter is outbound mail that no
- * one approves, the one way around send_email's per-message approval.
+ * `no-auto-forward` is always active too: a forwarding filter sends every future match,
+ * indefinitely, with nobody asking for any of those messages.
  *
  * Everything else is opt-in through GWS_SAFETY_POLICY.
  */
@@ -95,8 +95,8 @@ export function createServer(): Server {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
-        // send_email's requiresUserInteraction rides here; dropping it would silently
-        // turn every send back into an unprompted call.
+        // A manifest's requires_user_interaction rides here as _meta; dropping it would
+        // silently turn a gated tool into an unprompted one.
         ...(tool._meta ? { _meta: tool._meta } : {}),
       })),
     };
